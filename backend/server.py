@@ -1,72 +1,326 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
 import uuid
-from datetime import datetime, timezone
-
+from pathlib import Path
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime, timezone, timedelta
+import jwt
+import bcrypt
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
+JWT_SECRET = os.environ['JWT_SECRET']
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRATION_HOURS = 72
+
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+security = HTTPBearer()
 
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+# ── Pydantic Models ──────────────────────────────────────────────
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+class UserRegister(BaseModel):
+    username: str
+    email: str
+    password: str
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
+class UserLogin(BaseModel):
+    email: str
+    password: str
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
+class FilamentCreate(BaseModel):
+    brand: str
+    filament_type: str
+    color: str
+    color_hex: str = "#ffffff"
+    weight_total: float
+    weight_remaining: float
+    cost: float = 0.0
+    diameter: float = 1.75
+    temp_nozzle: int = 200
+    temp_bed: int = 60
+    purchase_date: Optional[str] = None
+    notes: str = ""
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+class FilamentUpdate(BaseModel):
+    brand: Optional[str] = None
+    filament_type: Optional[str] = None
+    color: Optional[str] = None
+    color_hex: Optional[str] = None
+    weight_total: Optional[float] = None
+    weight_remaining: Optional[float] = None
+    cost: Optional[float] = None
+    diameter: Optional[float] = None
+    temp_nozzle: Optional[int] = None
+    temp_bed: Optional[int] = None
+    purchase_date: Optional[str] = None
+    notes: Optional[str] = None
 
-# Include the router in the main app
+class PrintJobCreate(BaseModel):
+    filament_id: str
+    project_name: str
+    weight_used: float
+    duration_minutes: int = 0
+    notes: str = ""
+
+
+# ── Auth Helpers ─────────────────────────────────────────────────
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+def create_token(user_id: str) -> str:
+    payload = {
+        "sub": user_id,
+        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+# ── Auth Routes ──────────────────────────────────────────────────
+
+@api_router.post("/auth/register")
+async def register(data: UserRegister):
+    existing = await db.users.find_one({"email": data.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    user_id = str(uuid.uuid4())
+    user_doc = {
+        "id": user_id,
+        "username": data.username,
+        "email": data.email,
+        "password_hash": hash_password(data.password),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.users.insert_one(user_doc)
+    token = create_token(user_id)
+    return {"token": token, "user": {"id": user_id, "username": data.username, "email": data.email}}
+
+@api_router.post("/auth/login")
+async def login(data: UserLogin):
+    user = await db.users.find_one({"email": data.email}, {"_id": 0})
+    if not user or not verify_password(data.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_token(user["id"])
+    return {"token": token, "user": {"id": user["id"], "username": user["username"], "email": user["email"]}}
+
+@api_router.get("/auth/me")
+async def get_me(user=Depends(get_current_user)):
+    return user
+
+
+# ── Filament Routes ──────────────────────────────────────────────
+
+@api_router.get("/filaments")
+async def list_filaments(
+    filament_type: Optional[str] = None,
+    brand: Optional[str] = None,
+    user=Depends(get_current_user)
+):
+    query = {"user_id": user["id"]}
+    if filament_type:
+        query["filament_type"] = filament_type
+    if brand:
+        query["brand"] = brand
+    filaments = await db.filaments.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return filaments
+
+@api_router.post("/filaments")
+async def create_filament(data: FilamentCreate, user=Depends(get_current_user)):
+    filament_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": filament_id,
+        "user_id": user["id"],
+        **data.model_dump(),
+        "created_at": now,
+        "updated_at": now
+    }
+    await db.filaments.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/filaments/{filament_id}")
+async def update_filament(filament_id: str, data: FilamentUpdate, user=Depends(get_current_user)):
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.filaments.update_one(
+        {"id": filament_id, "user_id": user["id"]},
+        {"$set": update_data}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Filament not found")
+    updated = await db.filaments.find_one({"id": filament_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/filaments/{filament_id}")
+async def delete_filament(filament_id: str, user=Depends(get_current_user)):
+    result = await db.filaments.delete_one({"id": filament_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Filament not found")
+    return {"message": "Filament deleted"}
+
+
+# ── Print Job Routes ─────────────────────────────────────────────
+
+@api_router.get("/print-jobs")
+async def list_print_jobs(user=Depends(get_current_user)):
+    jobs = await db.print_jobs.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return jobs
+
+@api_router.post("/print-jobs")
+async def create_print_job(data: PrintJobCreate, user=Depends(get_current_user)):
+    filament = await db.filaments.find_one(
+        {"id": data.filament_id, "user_id": user["id"]}, {"_id": 0}
+    )
+    if not filament:
+        raise HTTPException(status_code=404, detail="Filament not found")
+    new_weight = max(0, filament["weight_remaining"] - data.weight_used)
+    await db.filaments.update_one(
+        {"id": data.filament_id},
+        {"$set": {"weight_remaining": new_weight, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    job_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": job_id,
+        "user_id": user["id"],
+        **data.model_dump(),
+        "filament_brand": filament.get("brand", ""),
+        "filament_type": filament.get("filament_type", ""),
+        "filament_color": filament.get("color", ""),
+        "filament_color_hex": filament.get("color_hex", "#ffffff"),
+        "created_at": now
+    }
+    await db.print_jobs.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.delete("/print-jobs/{job_id}")
+async def delete_print_job(job_id: str, user=Depends(get_current_user)):
+    result = await db.print_jobs.delete_one({"id": job_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Print job not found")
+    return {"message": "Print job deleted"}
+
+
+# ── Dashboard ────────────────────────────────────────────────────
+
+@api_router.get("/dashboard/stats")
+async def get_dashboard_stats(user=Depends(get_current_user)):
+    user_id = user["id"]
+    filaments = await db.filaments.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
+    jobs = await db.print_jobs.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+    total_filaments = len(filaments)
+    total_weight = sum(f.get("weight_remaining", 0) for f in filaments)
+    total_value = sum(f.get("cost", 0) for f in filaments)
+    low_stock = [
+        f for f in filaments
+        if f.get("weight_total", 0) > 0 and (f.get("weight_remaining", 0) / f.get("weight_total", 1)) < 0.2
+    ]
+    total_used = sum(j.get("weight_used", 0) for j in jobs)
+
+    type_usage = {}
+    for j in jobs:
+        ft = j.get("filament_type", "Unknown")
+        type_usage[ft] = type_usage.get(ft, 0) + j.get("weight_used", 0)
+    usage_by_type = [{"name": k, "weight": round(v, 1)} for k, v in type_usage.items()]
+
+    type_count = {}
+    for f in filaments:
+        ft = f.get("filament_type", "Unknown")
+        type_count[ft] = type_count.get(ft, 0) + 1
+    type_distribution = [{"name": k, "count": v} for k, v in type_count.items()]
+
+    return {
+        "total_filaments": total_filaments,
+        "total_weight_remaining": round(total_weight, 1),
+        "total_inventory_value": round(total_value, 2),
+        "low_stock_count": len(low_stock),
+        "low_stock_filaments": low_stock[:5],
+        "recent_jobs": jobs[:5],
+        "usage_by_type": usage_by_type,
+        "type_distribution": type_distribution,
+        "total_prints": len(jobs),
+        "total_used": round(total_used, 1),
+    }
+
+
+# ── Alerts ───────────────────────────────────────────────────────
+
+@api_router.get("/alerts")
+async def get_alerts(user=Depends(get_current_user)):
+    filaments = await db.filaments.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    alerts = []
+    for f in filaments:
+        wt = f.get("weight_total", 0)
+        wr = f.get("weight_remaining", 0)
+        if wt > 0:
+            pct = (wr / wt) * 100
+            if pct < 10:
+                alerts.append({**f, "alert_level": "critical", "remaining_pct": round(pct, 1)})
+            elif pct < 20:
+                alerts.append({**f, "alert_level": "warning", "remaining_pct": round(pct, 1)})
+            elif pct < 30:
+                alerts.append({**f, "alert_level": "low", "remaining_pct": round(pct, 1)})
+    alerts.sort(key=lambda x: x.get("remaining_pct", 100))
+    return alerts
+
+
+# ── Reference Data ───────────────────────────────────────────────
+
+@api_router.get("/reference/brands")
+async def get_brands():
+    return [
+        "Hatchbox", "Prusament", "eSUN", "Polymaker", "Overture", "Sunlu",
+        "Inland", "MatterHackers", "ColorFabb", "Proto-pasta", "Bambu Lab",
+        "Creality", "Eryone", "TTYT3D", "Geeetech", "Elegoo", "Anycubic",
+        "3D Solutech", "Duramic", "ZIRO", "Other"
+    ]
+
+@api_router.get("/reference/types")
+async def get_types():
+    return [
+        "PLA", "PLA+", "ABS", "ABS+", "PETG", "PETG+", "TPU", "Nylon",
+        "ASA", "PC", "HIPS", "PVA", "Wood PLA", "Carbon Fiber PLA",
+        "Silk PLA", "Marble PLA", "Glow-in-Dark PLA", "Metal Fill PLA",
+        "PEEK", "PEI", "Other"
+    ]
+
+
+# ── App Setup ────────────────────────────────────────────────────
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -77,7 +331,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
