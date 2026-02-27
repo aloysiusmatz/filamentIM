@@ -1,0 +1,103 @@
+{
+  "identity": {
+    "name": "FilamentOS",
+    "persona": "E1: The Anti-AI Designer",
+    "tone": "Technical, Precision, Industrial, Tactic",
+    "aesthetic": "The Performance Pro mixed with Grid Borders"
+  },
+  "typography": {
+    "headings": {
+      "family": "JetBrains Mono, monospace",
+      "weights": ["700", "800"],
+      "usage": "All section headers, metrics, and data labels",
+      "tracking": "tracking-tight"
+    },
+    "body": {
+      "family": "Manrope, sans-serif",
+      "weights": ["400", "500", "600"],
+      "usage": "General text, table content, form labels"
+    }
+  },
+  "colors": {
+    "theme_strategy": "Dark Mode Default with Light Toggle",
+    "palette": {
+      "background": {
+        "dark": "#09090b",
+        "light": "#ffffff"
+      },
+      "surface": {
+        "dark": "#18181b",
+        "light": "#f4f4f5"
+      },
+      "border": {
+        "dark": "#27272a",
+        "light": "#e4e4e7"
+      },
+      "primary": {
+        "hex": "#f97316",
+        "tailwind": "orange-500",
+        "usage": "Call to actions, active states, heat indicators"
+      },
+      "accent": {
+        "hex": "#0ea5e9",
+        "tailwind": "sky-500",
+        "usage": "Info, cooling status, neutral data"
+      },
+      "semantic": {
+        "success": "#22c55e",
+        "warning": "#eab308",
+        "danger": "#ef4444"
+      }
+    }
+  },
+  "visual_enhancers": {
+    "surface_strategy": "Grid Borders",
+    "surface_description": "Expose the skeleton. Make the grid visible. Container: border-collapse. Items: border-r border-b border-border/40.",
+    "textures": "Subtle noise overlay on dashboard backgrounds to reduce digital flatness.",
+    "effects": {
+      "glass": "backdrop-blur-xl bg-black/60 border-white/10",
+      "glow": "shadow-[0_0_15px_rgba(249,115,22,0.3)] for primary actions"
+    }
+  },
+  "layout_strategy": {
+    "dashboard_grid": "Bento Grid Protocol (Mode B: High Density)",
+    "spacing": "Generous internal padding (p-6, p-8) within grid items, tight gaps (gap-px) for the grid border effect.",
+    "container": "max-w-[1600px] mx-auto p-4 md:p-8"
+  },
+  "components": {
+    "cards": {
+      "style": "Flat background, 1px subtle border, no shadow in default state. Hover: border-primary/50 transition-colors.",
+      "path": "/app/frontend/src/components/ui/card.jsx"
+    },
+    "tables": {
+      "style": "Dense, monospace font for data cells. Row hover effects.",
+      "path": "/app/frontend/src/components/ui/table.jsx"
+    },
+    "buttons": {
+      "style": "Sharp edges or small radius (rounded-md). High contrast.",
+      "path": "/app/frontend/src/components/ui/button.jsx"
+    },
+    "filament_indicator": {
+      "name": "FilamentSpool",
+      "type": "Custom SVG/Div",
+      "instruction": "Circular progress indicator representing the spool remaining weight."
+    }
+  },
+  "images": {
+    "hero_bg": "https://images.unsplash.com/photo-1756723902896-94e2d9332fbd?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODR8MHwxfHNlYXJjaHwxfHwzZCUyMHByaW50aW5nJTIwZmlsYW1lbnQlMjBzcG9vbCUyMHdvcmtzaG9wfGVufDB8fHx8MTc3MjE4MTk0MXww&ixlib=rb-4.1.0&q=85",
+    "dashboard_cover": "https://images.pexels.com/photos/20877032/pexels-photo-20877032.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "spool_texture": "https://images.pexels.com/photos/30658376/pexels-photo-30658376.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+  },
+  "universal_guidelines": [
+    "Dark colors look good when used independently without gradients.",
+    "DO NOT use dark colors as gradients.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "MUST NOT apply universal transition (transition: all).",
+    "MUST NOT center align the app container.",
+    "Every interaction needs micro-animations.",
+    "Use 2-3x more spacing than feels comfortable.",
+    "All interactive and key informational elements MUST include a data-testid attribute."
+  ],
+  "instructions_to_main_agent": "Implement the Dashboard using the Bento Grid layout. Use the 'Grid Borders' surface strategy where each widget has a visible border. Use JetBrains Mono for all numbers and headings. Ensure the 'Filament Inventory' table is high-density and allows sorting/filtering. The theme toggle should be prominent."
+}
