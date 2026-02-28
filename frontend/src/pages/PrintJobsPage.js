@@ -15,18 +15,25 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Loader2, Printer, Clock, Weight } from "lucide-react";
+import { Plus, Trash2, Loader2, Printer, Clock, Weight, CheckCircle2, XCircle, CircleDot, Ban } from "lucide-react";
 import { toast } from "sonner";
+
+const STATUS_OPTIONS = [
+  { value: "success", label: "Success", icon: CheckCircle2, color: "text-green-500", bg: "bg-green-500/10 text-green-500 border-green-500/30" },
+  { value: "failed", label: "Failed", icon: XCircle, color: "text-red-500", bg: "bg-red-500/10 text-red-500 border-red-500/30" },
+  { value: "in_progress", label: "In Progress", icon: CircleDot, color: "text-blue-500", bg: "bg-blue-500/10 text-blue-500 border-blue-500/30" },
+  { value: "cancelled", label: "Cancelled", icon: Ban, color: "text-gray-500", bg: "bg-gray-500/10 text-gray-500 border-gray-500/30" },
+];
 
 function PrintJobDialog({ open, onClose, filaments, onSave }) {
   const [form, setForm] = useState({
-    filament_id: "", project_name: "", weight_used: 0, duration_minutes: 0, notes: "",
+    filament_id: "", project_name: "", weight_used: 0, duration_minutes: 0, status: "success", notes: "",
   });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setForm({ filament_id: "", project_name: "", weight_used: 0, duration_minutes: 0, notes: "" });
+      setForm({ filament_id: "", project_name: "", weight_used: 0, duration_minutes: 0, status: "success", notes: "" });
     }
   }, [open]);
 
@@ -121,6 +128,25 @@ function PrintJobDialog({ open, onClose, filaments, onSave }) {
                 data-testid="print-job-duration-input"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Select value={form.status} onValueChange={(v) => set("status", v)}>
+              <SelectTrigger data-testid="print-job-status-select">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    <div className="flex items-center gap-2">
+                      <s.icon className={`w-3 h-3 ${s.color}`} />
+                      {s.label}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
