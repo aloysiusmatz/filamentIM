@@ -77,7 +77,34 @@ class PrintJobCreate(BaseModel):
     weight_used: float
     duration_minutes: int = 0
     status: str = "success"
+    printer_id: str = ""
     notes: str = ""
+
+
+class PrintJobUpdate(BaseModel):
+    project_name: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    status: Optional[str] = None
+    printer_id: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class PrinterCreate(BaseModel):
+    name: str
+    model: str = ""
+    build_volume: str = ""
+    notes: str = ""
+
+
+class PrinterUpdate(BaseModel):
+    name: Optional[str] = None
+    model: Optional[str] = None
+    build_volume: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class CustomOption(BaseModel):
+    name: str
 
 
 # ── Auth Helpers ─────────────────────────────────────────────────
@@ -271,6 +298,11 @@ async def create_print_job(data: PrintJobCreate, user=Depends(get_current_user))
         {"id": data.filament_id},
         {"$set": {"weight_remaining": new_weight, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
+    printer_name = ""
+    if data.printer_id:
+        printer = await db.printers.find_one({"id": data.printer_id, "user_id": user["id"]}, {"_id": 0})
+        if printer:
+            printer_name = printer.get("name", "")
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     doc = {
@@ -281,6 +313,7 @@ async def create_print_job(data: PrintJobCreate, user=Depends(get_current_user))
         "filament_type": filament.get("filament_type", ""),
         "filament_color": filament.get("color", ""),
         "filament_color_hex": filament.get("color_hex", "#ffffff"),
+        "printer_name": printer_name,
         "created_at": now
     }
     await db.print_jobs.insert_one(doc)
@@ -293,6 +326,66 @@ async def delete_print_job(job_id: str, user=Depends(get_current_user)):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Print job not found")
     return {"message": "Print job deleted"}
+
+
+@api_router.put("/print-jobs/{job_id}")
+async def update_print_job(job_id: str, data: PrintJobUpdate, user=Depends(get_current_user)):
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if "printer_id" in update_data and update_data["printer_id"]:
+        printer = await db.printers.find_one({"id": update_data["printer_id"], "user_id": user["id"]}, {"_id": 0})
+        update_data["printer_name"] = printer.get("name", "") if printer else ""
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.print_jobs.update_one(
+        {"id": job_id, "user_id": user["id"]},
+        {"$set": update_data}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Print job not found")
+    updated = await db.print_jobs.find_one({"id": job_id}, {"_id": 0})
+    return updated
+
+
+# ── Printer Routes ───────────────────────────────────────────────
+
+@api_router.get("/printers")
+async def list_printers(user=Depends(get_current_user)):
+    printers = await db.printers.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return printers
+
+@api_router.post("/printers")
+async def create_printer(data: PrinterCreate, user=Depends(get_current_user)):
+    printer_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "id": printer_id,
+        "user_id": user["id"],
+        **data.model_dump(),
+        "created_at": now,
+        "updated_at": now
+    }
+    await db.printers.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/printers/{printer_id}")
+async def update_printer(printer_id: str, data: PrinterUpdate, user=Depends(get_current_user)):
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.printers.update_one(
+        {"id": printer_id, "user_id": user["id"]},
+        {"$set": update_data}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Printer not found")
+    updated = await db.printers.find_one({"id": printer_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/printers/{printer_id}")
+async def delete_printer(printer_id: str, user=Depends(get_current_user)):
+    result = await db.printers.delete_one({"id": printer_id, "user_id": user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Printer not found")
+    return {"message": "Printer deleted"}
 
 
 # ── Dashboard ────────────────────────────────────────────────────
@@ -383,9 +476,47 @@ async def get_types():
 @api_router.get("/reference/user-options")
 async def get_user_options(user=Depends(get_current_user)):
     filaments = await db.filaments.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
-    brands = sorted(set(f["brand"] for f in filaments if f.get("brand")))
-    types = sorted(set(f["filament_type"] for f in filaments if f.get("filament_type")))
+    custom_brands_docs = await db.custom_brands.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    custom_types_docs = await db.custom_types.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    filament_brands = set(f["brand"] for f in filaments if f.get("brand"))
+    filament_types = set(f["filament_type"] for f in filaments if f.get("filament_type"))
+    custom_brand_names = set(d["name"] for d in custom_brands_docs if d.get("name"))
+    custom_type_names = set(d["name"] for d in custom_types_docs if d.get("name"))
+    brands = sorted(filament_brands | custom_brand_names)
+    types = sorted(filament_types | custom_type_names)
     return {"brands": brands, "types": types}
+
+
+@api_router.post("/reference/custom-brands")
+async def add_custom_brand(data: CustomOption, user=Depends(get_current_user)):
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Brand name required")
+    existing = await db.custom_brands.find_one({"user_id": user["id"], "name": name})
+    if not existing:
+        await db.custom_brands.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "name": name,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+    return {"message": "Brand saved", "name": name}
+
+
+@api_router.post("/reference/custom-types")
+async def add_custom_type(data: CustomOption, user=Depends(get_current_user)):
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Type name required")
+    existing = await db.custom_types.find_one({"user_id": user["id"], "name": name})
+    if not existing:
+        await db.custom_types.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "name": name,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+    return {"message": "Type saved", "name": name}
 
 
 # ── App Setup ────────────────────────────────────────────────────
