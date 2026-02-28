@@ -51,7 +51,7 @@ const emptyForm = {
   purchase_date: null, notes: "",
 };
 
-function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes }) {
+function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes, currencySymbol }) {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
@@ -219,7 +219,7 @@ function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes }
               />
             </div>
             <div className="space-y-2">
-              <Label>Cost ($)</Label>
+              <Label>Cost ({currencySymbol || "$"})</Label>
               <Input
                 type="number"
                 step="0.01"
@@ -325,6 +325,7 @@ export default function FilamentsPage() {
   const [importing, setImporting] = useState(false);
   const [allBrands, setAllBrands] = useState(BRANDS);
   const [allTypes, setAllTypes] = useState(TYPES);
+  const [prefs, setPrefs] = useState({ currency_symbol: "$" });
   const fileInputRef = useRef(null);
 
   const fetchFilaments = useCallback(async () => {
@@ -354,6 +355,10 @@ export default function FilamentsPage() {
   }, []);
 
   useEffect(() => { fetchFilaments(); fetchUserOptions(); }, [fetchFilaments, fetchUserOptions]);
+
+  useEffect(() => {
+    api.get("/user/preferences").then((res) => setPrefs(res.data)).catch(() => {});
+  }, []);
 
   const handleSave = async (data) => {
     if (editing) {
