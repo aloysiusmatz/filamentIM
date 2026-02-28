@@ -114,6 +114,9 @@ function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes }
                 options={allBrands}
                 value={form.brand}
                 onChange={(v) => set("brand", v)}
+                onCustomAdd={(v) => {
+                  api.post("/reference/custom-brands", { name: v }).then(() => fetchUserOptions()).catch(() => {});
+                }}
                 placeholder="Select or add brand"
                 testId="filament-brand-select"
               />
@@ -124,6 +127,9 @@ function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes }
                 options={allTypes}
                 value={form.filament_type}
                 onChange={(v) => set("filament_type", v)}
+                onCustomAdd={(v) => {
+                  api.post("/reference/custom-types", { name: v }).then(() => fetchUserOptions()).catch(() => {});
+                }}
                 placeholder="Select or add type"
                 testId="filament-type-select"
               />
