@@ -405,6 +405,11 @@ CustomBrand,PETG,Blue,#0000FF,1000,800,30.99,1.75,230,70,,Another test
         # Reference data tests
         self.test_reference_brands()
         self.test_reference_types()
+        self.test_user_options()
+        
+        # NEW FEATURE TESTS
+        self.test_export_filaments()
+        self.test_import_filaments()
         
         # Filament CRUD tests
         if self.test_create_filament():
@@ -413,6 +418,7 @@ CustomBrand,PETG,Blue,#0000FF,1000,800,30.99,1.75,230,70,,Another test
             
             # Print job tests (dependent on filament)
             if self.test_create_print_job():
+                self.test_create_print_job_different_statuses()  # NEW: Test all status values
                 self.test_list_print_jobs()
                 self.test_delete_print_job()
         
