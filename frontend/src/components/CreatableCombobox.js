@@ -7,7 +7,7 @@ import {
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function CreatableCombobox({ options, value, onChange, placeholder, testId }) {
+export function CreatableCombobox({ options, value, onChange, placeholder, testId, onCustomAdd }) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
@@ -17,6 +17,13 @@ export function CreatableCombobox({ options, value, onChange, placeholder, testI
 
   const handleSelect = (option) => {
     onChange(option);
+    setOpen(false);
+    setInputValue("");
+  };
+
+  const handleCustom = (val) => {
+    onChange(val);
+    if (onCustomAdd) onCustomAdd(val);
     setOpen(false);
     setInputValue("");
   };
@@ -47,7 +54,7 @@ export function CreatableCombobox({ options, value, onChange, placeholder, testI
               {inputValue.trim() ? (
                 <button
                   className="flex w-full items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm mx-auto justify-center"
-                  onClick={() => handleSelect(inputValue.trim())}
+                  onClick={() => handleCustom(inputValue.trim())}
                   data-testid={`${testId}-add-custom`}
                 >
                   <Plus className="h-3 w-3" />
@@ -61,7 +68,7 @@ export function CreatableCombobox({ options, value, onChange, placeholder, testI
               <CommandGroup heading="Add Custom">
                 <CommandItem
                   value={`__custom__${inputValue.trim()}`}
-                  onSelect={() => handleSelect(inputValue.trim())}
+                  onSelect={() => handleCustom(inputValue.trim())}
                 >
                   <Plus className="h-3 w-3 mr-1" />
                   Add &quot;{inputValue.trim()}&quot;

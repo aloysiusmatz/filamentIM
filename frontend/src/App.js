@@ -7,6 +7,7 @@ import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
 import FilamentsPage from "@/pages/FilamentsPage";
 import PrintJobsPage from "@/pages/PrintJobsPage";
+import PrintersPage from "@/pages/PrintersPage";
 import AlertsPage from "@/pages/AlertsPage";
 
 function ProtectedRoute({ children }) {
@@ -27,6 +28,7 @@ function AppRoutes() {
         <Route index element={<DashboardPage />} />
         <Route path="filaments" element={<FilamentsPage />} />
         <Route path="print-jobs" element={<PrintJobsPage />} />
+        <Route path="printers" element={<PrintersPage />} />
         <Route path="alerts" element={<AlertsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
