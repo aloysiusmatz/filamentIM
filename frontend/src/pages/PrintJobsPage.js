@@ -15,44 +15,76 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Loader2, Printer, Clock, Weight, CheckCircle2, XCircle, CircleDot, Ban } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Plus, Trash2, Loader2, Printer, Clock, Weight,
+  CheckCircle2, XCircle, CircleDot, Ban, MoreHorizontal, Pencil, Layers,
+} from "lucide-react";
 import { toast } from "sonner";
 
 const STATUS_OPTIONS = [
-  { value: "success", label: "Success", icon: CheckCircle2, color: "text-green-500", bg: "bg-green-500/10 text-green-500 border-green-500/30" },
+  { value: "success", label: "Finished", icon: CheckCircle2, color: "text-green-500", bg: "bg-green-500/10 text-green-500 border-green-500/30" },
   { value: "failed", label: "Failed", icon: XCircle, color: "text-red-500", bg: "bg-red-500/10 text-red-500 border-red-500/30" },
   { value: "in_progress", label: "In Progress", icon: CircleDot, color: "text-blue-500", bg: "bg-blue-500/10 text-blue-500 border-blue-500/30" },
   { value: "cancelled", label: "Cancelled", icon: Ban, color: "text-gray-500", bg: "bg-gray-500/10 text-gray-500 border-gray-500/30" },
 ];
 
-function PrintJobDialog({ open, onClose, filaments, onSave }) {
+function PrintJobDialog({ open, onClose, filaments, printers, onSave, editingJob }) {
   const [form, setForm] = useState({
-    filament_id: "", project_name: "", weight_used: 0, duration_minutes: 0, status: "success", notes: "",
+    filament_id: "", project_name: "", weight_used: 0, duration_minutes: 0,
+    status: "in_progress", printer_id: "", notes: "",
   });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setForm({ filament_id: "", project_name: "", weight_used: 0, duration_minutes: 0, status: "success", notes: "" });
+      if (editingJob) {
+        setForm({
+          filament_id: editingJob.filament_id || "",
+          project_name: editingJob.project_name || "",
+          weight_used: editingJob.weight_used || 0,
+          duration_minutes: editingJob.duration_minutes || 0,
+          status: editingJob.status || "in_progress",
+          printer_id: editingJob.printer_id || "",
+          notes: editingJob.notes || "",
+        });
+      } else {
+        setForm({
+          filament_id: "", project_name: "", weight_used: 0,
+          duration_minutes: 0, status: "in_progress", printer_id: "", notes: "",
+        });
+      }
     }
-  }, [open]);
+  }, [open, editingJob]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.filament_id) {
+    if (!editingJob && !form.filament_id) {
       toast.error("Select a filament");
       return;
     }
     setSaving(true);
     try {
-      await onSave({
-        ...form,
-        weight_used: Number(form.weight_used),
-        duration_minutes: Number(form.duration_minutes),
-      });
+      if (editingJob) {
+        await onSave({
+          project_name: form.project_name,
+          duration_minutes: Number(form.duration_minutes),
+          status: form.status,
+          printer_id: form.printer_id,
+          notes: form.notes,
+        }, editingJob.id);
+      } else {
+        await onSave({
+          ...form,
+          weight_used: Number(form.weight_used),
+          duration_minutes: Number(form.duration_minutes),
+        });
+      }
       onClose();
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to log print");
+      toast.error(err.response?.data?.detail || "Failed to save");
     } finally {
       setSaving(false);
     }
@@ -60,18 +92,27 @@ function PrintJobDialog({ open, onClose, filaments, onSave }) {
 
   const set = (key, val) => setForm((p) => ({ ...p, [key]: val }));
   const selectedFilament = filaments.find((f) => f.id === form.filament_id);
+  const isEdit = !!editingJob;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle data-testid="print-job-dialog-title">Log Print Job</DialogTitle>
-          <DialogDescription>Record a new print and track filament usage</DialogDescription>
+          <DialogTitle data-testid="print-job-dialog-title">
+            {isEdit ? "Edit Print Job" : "Log Print Job"}
+          </DialogTitle>
+          <DialogDescription>
+            {isEdit ? "Update print job details" : "Record a new print and track filament usage"}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4" data-testid="print-job-form">
           <div className="space-y-2">
             <Label>Filament Spool</Label>
-            <Select value={form.filament_id} onValueChange={(v) => set("filament_id", v)}>
+            <Select
+              value={form.filament_id}
+              onValueChange={(v) => set("filament_id", v)}
+              disabled={isEdit}
+            >
               <SelectTrigger data-testid="print-job-filament-select">
                 <SelectValue placeholder="Select filament" />
               </SelectTrigger>
@@ -89,7 +130,7 @@ function PrintJobDialog({ open, onClose, filaments, onSave }) {
                 ))}
               </SelectContent>
             </Select>
-            {selectedFilament && (
+            {selectedFilament && !isEdit && (
               <p className="text-xs text-muted-foreground font-body">
                 Available: {selectedFilament.weight_remaining}g of {selectedFilament.weight_total}g
               </p>
@@ -107,6 +148,28 @@ function PrintJobDialog({ open, onClose, filaments, onSave }) {
             />
           </div>
 
+          {printers.length > 0 && (
+            <div className="space-y-2">
+              <Label>Printer</Label>
+              <Select value={form.printer_id} onValueChange={(v) => set("printer_id", v)}>
+                <SelectTrigger data-testid="print-job-printer-select">
+                  <SelectValue placeholder="Select printer (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No printer selected</SelectItem>
+                  {printers.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <div className="flex items-center gap-2">
+                        <Layers className="w-3 h-3" />
+                        {p.name} {p.model ? `(${p.model})` : ""}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Weight Used (g)</Label>
@@ -116,8 +179,12 @@ function PrintJobDialog({ open, onClose, filaments, onSave }) {
                 value={form.weight_used}
                 onChange={(e) => set("weight_used", e.target.value)}
                 required
+                disabled={isEdit}
                 data-testid="print-job-weight-input"
               />
+              {isEdit && (
+                <p className="text-xs text-muted-foreground">Cannot change weight after creation</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Duration (min)</Label>
@@ -166,7 +233,7 @@ function PrintJobDialog({ open, onClose, filaments, onSave }) {
             </Button>
             <Button type="submit" disabled={saving} className="glow-primary" data-testid="print-job-save-btn">
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Log Print
+              {isEdit ? "Update" : "Log Print"}
             </Button>
           </DialogFooter>
         </form>
@@ -185,17 +252,21 @@ function formatDuration(mins) {
 export default function PrintJobsPage() {
   const [jobs, setJobs] = useState([]);
   const [filaments, setFilaments] = useState([]);
+  const [printers, setPrinters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingJob, setEditingJob] = useState(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const [jobsRes, filRes] = await Promise.all([
+      const [jobsRes, filRes, printerRes] = await Promise.all([
         api.get("/print-jobs"),
         api.get("/filaments"),
+        api.get("/printers"),
       ]);
       setJobs(jobsRes.data);
       setFilaments(filRes.data);
+      setPrinters(printerRes.data);
     } catch {
       toast.error("Failed to load data");
     } finally {
@@ -205,9 +276,20 @@ export default function PrintJobsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleSave = async (data) => {
-    await api.post("/print-jobs", data);
-    toast.success("Print job logged");
+  const handleSave = async (data, jobId) => {
+    if (jobId) {
+      // Handle "none" printer_id
+      const payload = { ...data };
+      if (payload.printer_id === "none") payload.printer_id = "";
+      await api.put(`/print-jobs/${jobId}`, payload);
+      toast.success("Print job updated");
+    } else {
+      const payload = { ...data };
+      if (payload.printer_id === "none") payload.printer_id = "";
+      await api.post("/print-jobs", payload);
+      toast.success("Print job logged");
+    }
+    setEditingJob(null);
     fetchData();
   };
 
@@ -223,6 +305,7 @@ export default function PrintJobsPage() {
 
   const totalWeight = jobs.reduce((sum, j) => sum + (j.weight_used || 0), 0);
   const totalTime = jobs.reduce((sum, j) => sum + (j.duration_minutes || 0), 0);
+  const successCount = jobs.filter((j) => j.status === "success").length;
 
   if (loading) {
     return (
@@ -244,7 +327,7 @@ export default function PrintJobsPage() {
           </p>
         </div>
         <Button
-          onClick={() => setDialogOpen(true)}
+          onClick={() => { setEditingJob(null); setDialogOpen(true); }}
           className="glow-primary"
           disabled={filaments.length === 0}
           data-testid="add-print-job-btn"
@@ -254,7 +337,7 @@ export default function PrintJobsPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <Card className="p-4 border-border/40">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -288,6 +371,17 @@ export default function PrintJobsPage() {
             </div>
           </div>
         </Card>
+        <Card className="p-4 border-border/40">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center">
+              <CheckCircle2 className="w-4 h-4 text-green-500" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground font-body">Finished</p>
+              <p className="text-xl font-bold font-mono text-green-500" data-testid="success-count">{successCount}</p>
+            </div>
+          </div>
+        </Card>
       </div>
 
       <Card className="border-border/40 overflow-hidden">
@@ -297,6 +391,7 @@ export default function PrintJobsPage() {
               <TableHead className="w-[40px]"></TableHead>
               <TableHead>Project</TableHead>
               <TableHead>Filament</TableHead>
+              <TableHead>Printer</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Weight</TableHead>
               <TableHead className="text-right">Duration</TableHead>
@@ -307,64 +402,91 @@ export default function PrintJobsPage() {
           <TableBody>
             {jobs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground font-body">
+                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground font-body">
                   {filaments.length === 0
                     ? "Add filaments first, then log your prints"
                     : "No prints logged yet. Start printing!"}
                 </TableCell>
               </TableRow>
             ) : (
-              jobs.map((j) => (
-                <TableRow key={j.id} data-testid={`job-row-${j.id}`} className="group">
-                  <TableCell>
-                    <div
-                      className="color-swatch"
-                      style={{ backgroundColor: j.filament_color_hex || "#888" }}
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium font-body">{j.project_name}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="font-mono text-xs">
-                        {j.filament_type}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground font-body">
-                        {j.filament_brand} {j.filament_color}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {(() => {
-                      const statusConf = STATUS_OPTIONS.find((s) => s.value === j.status) || STATUS_OPTIONS[0];
-                      const Icon = statusConf.icon;
-                      return (
-                        <Badge variant="outline" className={`font-mono text-xs ${statusConf.bg} border`} data-testid={`job-status-${j.id}`}>
-                          <Icon className="w-3 h-3 mr-1" />
-                          {statusConf.label}
+              jobs.map((j) => {
+                const statusConf = STATUS_OPTIONS.find((s) => s.value === j.status) || STATUS_OPTIONS[0];
+                const StatusIcon = statusConf.icon;
+                return (
+                  <TableRow key={j.id} data-testid={`job-row-${j.id}`} className="group">
+                    <TableCell>
+                      <div
+                        className="color-swatch"
+                        style={{ backgroundColor: j.filament_color_hex || "#888" }}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium font-body">{j.project_name}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="font-mono text-xs">
+                          {j.filament_type}
                         </Badge>
-                      );
-                    })()}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">{j.weight_used}g</TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {formatDuration(j.duration_minutes)}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground font-mono">
-                    {new Date(j.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(j.id)}
-                      data-testid={`delete-job-${j.id}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+                        <span className="text-sm text-muted-foreground font-body">
+                          {j.filament_brand} {j.filament_color}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {j.printer_name ? (
+                        <span className="text-sm font-body">{j.printer_name}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={`font-mono text-xs ${statusConf.bg} border`}
+                        data-testid={`job-status-${j.id}`}
+                      >
+                        <StatusIcon className="w-3 h-3 mr-1" />
+                        {statusConf.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-mono">{j.weight_used}g</TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {formatDuration(j.duration_minutes)}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground font-mono">
+                      {new Date(j.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            data-testid={`job-actions-${j.id}`}
+                          >
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => { setEditingJob(j); setDialogOpen(true); }}
+                            data-testid={`edit-job-${j.id}`}
+                          >
+                            <Pencil className="w-4 h-4 mr-2" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDelete(j.id)}
+                            className="text-destructive focus:text-destructive"
+                            data-testid={`delete-job-${j.id}`}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -372,9 +494,11 @@ export default function PrintJobsPage() {
 
       <PrintJobDialog
         open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
+        onClose={() => { setDialogOpen(false); setEditingJob(null); }}
         filaments={filaments}
+        printers={printers}
         onSave={handleSave}
+        editingJob={editingJob}
       />
     </div>
   );
