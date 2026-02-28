@@ -216,6 +216,34 @@ function PrintJobDialog({ open, onClose, filaments, printers, onSave, editingJob
             </Select>
           </div>
 
+          {!isEdit && form.filament_id && Number(form.weight_used) > 0 && (
+            <div className="p-3 rounded-lg bg-muted/50 border border-border/40 space-y-1" data-testid="cost-preview">
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <DollarSign className="w-3 h-3" /> Estimated Cost
+              </p>
+              {(() => {
+                const fil = filaments.find((f) => f.id === form.filament_id);
+                const pr = printers.find((p) => p.id === form.printer_id);
+                if (!fil) return null;
+                const costPerG = fil.cost / Math.max(fil.weight_total, 1);
+                const filCost = Number(form.weight_used) * costPerG;
+                const powerKw = pr ? (pr.power_kwh || 0.2) : 0.2;
+                const elecCost = powerKw * (Number(form.duration_minutes) / 60) * (electricityRate || 0.12);
+                const total = filCost + elecCost;
+                const sym = currencySymbol || "$";
+                return (
+                  <div className="flex items-center gap-4 text-sm font-mono">
+                    <span>Filament: {sym}{filCost.toFixed(2)}</span>
+                    <span className="text-muted-foreground">+</span>
+                    <span>Electricity: {sym}{elecCost.toFixed(2)}</span>
+                    <span className="text-muted-foreground">=</span>
+                    <span className="font-bold text-primary">{sym}{total.toFixed(2)}</span>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>Notes</Label>
             <Textarea
