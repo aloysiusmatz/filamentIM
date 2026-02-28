@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Plus, Trash2, Loader2, Printer, Clock, Weight,
-  CheckCircle2, XCircle, CircleDot, Ban, MoreHorizontal, Pencil, Layers,
+  CheckCircle2, XCircle, CircleDot, Ban, MoreHorizontal, Pencil, Layers, DollarSign,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,7 +31,7 @@ const STATUS_OPTIONS = [
   { value: "cancelled", label: "Cancelled", icon: Ban, color: "text-gray-500", bg: "bg-gray-500/10 text-gray-500 border-gray-500/30" },
 ];
 
-function PrintJobDialog({ open, onClose, filaments, printers, onSave, editingJob }) {
+function PrintJobDialog({ open, onClose, filaments, printers, onSave, editingJob, currencySymbol, electricityRate }) {
   const [form, setForm] = useState({
     filament_id: "", project_name: "", weight_used: 0, duration_minutes: 0,
     status: "in_progress", printer_id: "", notes: "",
