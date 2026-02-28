@@ -297,6 +297,7 @@ export default function PrintJobsPage() {
               <TableHead className="w-[40px]"></TableHead>
               <TableHead>Project</TableHead>
               <TableHead>Filament</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="text-right">Weight</TableHead>
               <TableHead className="text-right">Duration</TableHead>
               <TableHead>Date</TableHead>
@@ -306,7 +307,7 @@ export default function PrintJobsPage() {
           <TableBody>
             {jobs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground font-body">
+                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground font-body">
                   {filaments.length === 0
                     ? "Add filaments first, then log your prints"
                     : "No prints logged yet. Start printing!"}
@@ -331,6 +332,18 @@ export default function PrintJobsPage() {
                         {j.filament_brand} {j.filament_color}
                       </span>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const statusConf = STATUS_OPTIONS.find((s) => s.value === j.status) || STATUS_OPTIONS[0];
+                      const Icon = statusConf.icon;
+                      return (
+                        <Badge variant="outline" className={`font-mono text-xs ${statusConf.bg} border`} data-testid={`job-status-${j.id}`}>
+                          <Icon className="w-3 h-3 mr-1" />
+                          {statusConf.label}
+                        </Badge>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="text-right font-mono">{j.weight_used}g</TableCell>
                   <TableCell className="text-right font-mono text-sm">
