@@ -643,6 +643,8 @@ def main():
     
     # Test new features
     tests_results = [
+        tester.test_user_preferences(),
+        tester.test_calculator(),
         tester.test_printer_crud(),
         tester.test_print_job_operations(), 
         tester.test_custom_options(),
