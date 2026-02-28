@@ -74,7 +74,7 @@ class FilamentVaultTester:
         return False
 
     def test_printer_crud(self):
-        """Test complete printer CRUD operations"""
+        """Test complete printer CRUD operations including power_kwh field"""
         print(f"\n{'='*50}")
         print("TESTING PRINTER CRUD OPERATIONS")
         print(f"{'='*50}")
@@ -89,16 +89,17 @@ class FilamentVaultTester:
         if not success:
             return False
         
-        # Test POST printer
+        # Test POST printer with power_kwh field
         printer_data = {
             "name": "Test Ender 3 V2",
             "model": "Creality Ender 3 V2",
             "build_volume": "220x220x250",
+            "power_kwh": 0.25,  # Test explicit power value
             "notes": "Test printer for automated testing"
         }
         
         success, new_printer = self.run_test(
-            "POST Printer (Create)",
+            "POST Printer (Create with power_kwh)",
             "POST",
             "printers", 
             200,
@@ -113,6 +114,41 @@ class FilamentVaultTester:
             return False
         print(f"   Created printer ID: {self.printer_id}")
         
+        # Check power_kwh field was set correctly
+        if new_printer.get('power_kwh') != 0.25:
+            print(f"❌ Power kWh not set correctly. Expected 0.25, got {new_printer.get('power_kwh')}")
+            return False
+        print(f"   Power consumption set correctly: {new_printer.get('power_kwh')} kW")
+        
+        # Test POST printer without power_kwh (should default to 0.2)
+        printer_data_default = {
+            "name": "Default Power Printer",
+            "model": "Test Model"
+        }
+        
+        success, default_printer = self.run_test(
+            "POST Printer (Default power_kwh)",
+            "POST",
+            "printers", 
+            200,
+            data=printer_data_default
+        )
+        if not success:
+            return False
+        
+        if default_printer.get('power_kwh') != 0.2:
+            print(f"❌ Default power kWh incorrect. Expected 0.2, got {default_printer.get('power_kwh')}")
+            return False
+        print(f"   Default power consumption correct: {default_printer.get('power_kwh')} kW")
+        
+        # Clean up default printer
+        self.run_test(
+            "DELETE Default Printer",
+            "DELETE",
+            f"printers/{default_printer.get('id')}",
+            200
+        )
+        
         # Test GET printers (should have 1 now)
         success, printers = self.run_test(
             "GET Printers (After Create)",
@@ -124,14 +160,15 @@ class FilamentVaultTester:
             print("❌ Printer not found after creation")
             return False
         
-        # Test PUT printer (update)
+        # Test PUT printer (update power_kwh)
         update_data = {
             "name": "Updated Test Ender 3 V2",
+            "power_kwh": 0.3,
             "notes": "Updated notes for testing"
         }
         
         success, updated_printer = self.run_test(
-            "PUT Printer (Update)",
+            "PUT Printer (Update with power_kwh)",
             "PUT",
             f"printers/{self.printer_id}",
             200,
@@ -144,7 +181,11 @@ class FilamentVaultTester:
             print("❌ Printer name was not updated correctly")
             return False
         
-        print("✅ All printer CRUD operations passed")
+        if updated_printer.get('power_kwh') != 0.3:
+            print(f"❌ Power kWh was not updated correctly. Expected 0.3, got {updated_printer.get('power_kwh')}")
+            return False
+        
+        print("✅ All printer CRUD operations with power_kwh passed")
         return True
 
     def test_print_job_operations(self):
