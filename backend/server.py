@@ -93,6 +93,7 @@ class PrinterCreate(BaseModel):
     name: str
     model: str = ""
     build_volume: str = ""
+    power_kwh: float = 0.2
     notes: str = ""
 
 
@@ -100,11 +101,27 @@ class PrinterUpdate(BaseModel):
     name: Optional[str] = None
     model: Optional[str] = None
     build_volume: Optional[str] = None
+    power_kwh: Optional[float] = None
     notes: Optional[str] = None
 
 
 class CustomOption(BaseModel):
     name: str
+
+
+class UserPreferencesUpdate(BaseModel):
+    country: str = "US"
+    currency: str = "USD"
+    currency_symbol: str = "$"
+    electricity_rate: float = 0.12
+
+
+class CostEstimateRequest(BaseModel):
+    weight_grams: float
+    filament_cost_per_kg: float
+    printer_power_kw: float
+    duration_minutes: float
+    electricity_rate: float
 
 
 # ── Auth Helpers ─────────────────────────────────────────────────
@@ -322,10 +339,21 @@ async def create_print_job(data: PrintJobCreate, user=Depends(get_current_user))
 
 @api_router.delete("/print-jobs/{job_id}")
 async def delete_print_job(job_id: str, user=Depends(get_current_user)):
-    result = await db.print_jobs.delete_one({"id": job_id, "user_id": user["id"]})
-    if result.deleted_count == 0:
+    job = await db.print_jobs.find_one({"id": job_id, "user_id": user["id"]}, {"_id": 0})
+    if not job:
         raise HTTPException(status_code=404, detail="Print job not found")
-    return {"message": "Print job deleted"}
+    weight_restored = 0.0
+    if job.get("filament_id") and job.get("weight_used"):
+        filament = await db.filaments.find_one({"id": job["filament_id"]}, {"_id": 0})
+        if filament:
+            new_weight = min(filament.get("weight_total", 0), filament.get("weight_remaining", 0) + job["weight_used"])
+            await db.filaments.update_one(
+                {"id": job["filament_id"]},
+                {"$set": {"weight_remaining": new_weight, "updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+            weight_restored = job["weight_used"]
+    await db.print_jobs.delete_one({"id": job_id, "user_id": user["id"]})
+    return {"message": "Print job deleted", "weight_restored": weight_restored}
 
 
 @api_router.put("/print-jobs/{job_id}")
