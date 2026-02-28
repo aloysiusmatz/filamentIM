@@ -12,11 +12,11 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus, MoreHorizontal, Pencil, Trash2, Loader2, Layers, Box, Ruler,
+  Plus, MoreHorizontal, Pencil, Trash2, Loader2, Layers, Box, Ruler, Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
-const emptyPrinter = { name: "", model: "", build_volume: "", notes: "" };
+const emptyPrinter = { name: "", model: "", build_volume: "", power_kwh: 0.2, notes: "" };
 
 function PrinterDialog({ open, onClose, printer, onSave }) {
   const [form, setForm] = useState(emptyPrinter);
@@ -81,6 +81,20 @@ function PrinterDialog({ open, onClose, printer, onSave }) {
               placeholder="e.g. 220x220x250"
               data-testid="printer-volume-input"
             />
+          </div>
+          <div className="space-y-2">
+            <Label>Power Consumption (kW)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={form.power_kwh}
+              onChange={(e) => set("power_kwh", Number(e.target.value))}
+              placeholder="e.g. 0.2"
+              data-testid="printer-power-input"
+            />
+            <p className="text-xs text-muted-foreground font-body">
+              Typical FDM printer: 0.1-0.3 kW. Used for cost estimation.
+            </p>
           </div>
           <div className="space-y-2">
             <Label>Notes</Label>
@@ -220,6 +234,10 @@ export default function PrintersPage() {
                           <span className="font-mono">{p.build_volume}</span>
                         </div>
                       )}
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Zap className="w-3 h-3" />
+                        <span className="font-mono">{p.power_kwh || 0.2} kW</span>
+                      </div>
                       {p.notes && (
                         <p className="text-xs text-muted-foreground font-body mt-2 line-clamp-2">
                           {p.notes}
