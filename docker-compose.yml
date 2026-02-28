@@ -10,11 +10,8 @@ services:
     build: ./backend
     container_name: filament_backend
     restart: always
-    environment:
-      MONGO_URL: mongodb://mongodb:27017
-      DB_NAME: filament_management
-      JWT_SECRET: filament_super_secret_123
-      PORT: 5000
+    env_file: 
+      - .env  # <-- Docker akan otomatis menyuntikkan semua variabel di .env ke backend
     depends_on:
       - mongodb
 
