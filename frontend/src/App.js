@@ -8,6 +8,8 @@ import DashboardPage from "@/pages/DashboardPage";
 import FilamentsPage from "@/pages/FilamentsPage";
 import PrintJobsPage from "@/pages/PrintJobsPage";
 import PrintersPage from "@/pages/PrintersPage";
+import CalculatorPage from "@/pages/CalculatorPage";
+import SettingsPage from "@/pages/SettingsPage";
 import AlertsPage from "@/pages/AlertsPage";
 
 function ProtectedRoute({ children }) {
@@ -29,7 +31,9 @@ function AppRoutes() {
         <Route path="filaments" element={<FilamentsPage />} />
         <Route path="print-jobs" element={<PrintJobsPage />} />
         <Route path="printers" element={<PrintersPage />} />
+        <Route path="calculator" element={<CalculatorPage />} />
         <Route path="alerts" element={<AlertsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
