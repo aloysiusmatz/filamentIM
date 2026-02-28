@@ -19,11 +19,17 @@ import bcrypt
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+mongo_url = os.getenv('MONGO_URL')
+db_name = os.getenv('DB_NAME')
+jwt_secret = os.getenv('JWT_SECRET')
 
-JWT_SECRET = os.environ['JWT_SECRET']
+if not mongo_url or not db_name or not jwt_secret:
+    raise Exception("Environment variables not set properly")
+
+client = AsyncIOMotorClient(mongo_url)
+db = client[db_name]
+
+JWT_SECRET = jwt_secret
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 72
 
