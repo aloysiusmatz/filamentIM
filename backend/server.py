@@ -174,6 +174,63 @@ async def create_filament(data: FilamentCreate, user=Depends(get_current_user)):
     doc.pop("_id", None)
     return doc
 
+
+@api_router.get("/filaments/export")
+async def export_filaments(user=Depends(get_current_user)):
+    filaments = await db.filaments.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Brand", "Type", "Color", "Color Hex", "Weight Total (g)",
+        "Weight Remaining (g)", "Cost ($)", "Diameter (mm)",
+        "Nozzle Temp", "Bed Temp", "Purchase Date", "Notes"
+    ])
+    for f in filaments:
+        writer.writerow([
+            f.get("brand", ""), f.get("filament_type", ""), f.get("color", ""),
+            f.get("color_hex", ""), f.get("weight_total", 0), f.get("weight_remaining", 0),
+            f.get("cost", 0), f.get("diameter", 1.75), f.get("temp_nozzle", 200),
+            f.get("temp_bed", 60), f.get("purchase_date", ""), f.get("notes", ""),
+        ])
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=filaments_export.csv"}
+    )
+
+
+@api_router.post("/filaments/import")
+async def import_filaments(file: UploadFile = File(...), user=Depends(get_current_user)):
+    content = await file.read()
+    reader = csv.DictReader(io.StringIO(content.decode("utf-8")))
+    count = 0
+    for row in reader:
+        filament_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        doc = {
+            "id": filament_id,
+            "user_id": user["id"],
+            "brand": row.get("Brand", ""),
+            "filament_type": row.get("Type", ""),
+            "color": row.get("Color", ""),
+            "color_hex": row.get("Color Hex", "#ffffff"),
+            "weight_total": float(row.get("Weight Total (g)", 1000)),
+            "weight_remaining": float(row.get("Weight Remaining (g)", 1000)),
+            "cost": float(row.get("Cost ($)", 0)),
+            "diameter": float(row.get("Diameter (mm)", 1.75)),
+            "temp_nozzle": int(float(row.get("Nozzle Temp", 200))),
+            "temp_bed": int(float(row.get("Bed Temp", 60))),
+            "purchase_date": row.get("Purchase Date", None) or None,
+            "notes": row.get("Notes", ""),
+            "created_at": now,
+            "updated_at": now,
+        }
+        await db.filaments.insert_one(doc)
+        count += 1
+    return {"message": f"Imported {count} filaments", "count": count}
+
+
 @api_router.put("/filaments/{filament_id}")
 async def update_filament(filament_id: str, data: FilamentUpdate, user=Depends(get_current_user)):
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
@@ -321,6 +378,14 @@ async def get_types():
         "Silk PLA", "Marble PLA", "Glow-in-Dark PLA", "Metal Fill PLA",
         "PEEK", "PEI", "Other"
     ]
+
+
+@api_router.get("/reference/user-options")
+async def get_user_options(user=Depends(get_current_user)):
+    filaments = await db.filaments.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    brands = sorted(set(f["brand"] for f in filaments if f.get("brand")))
+    types = sorted(set(f["filament_type"] for f in filaments if f.get("filament_type")))
+    return {"brands": brands, "types": types}
 
 
 # ── App Setup ────────────────────────────────────────────────────
