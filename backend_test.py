@@ -270,6 +270,137 @@ class FilamentVaultTester:
         print("✅ All print job operations passed")
         return True
 
+    def test_user_preferences(self):
+        """Test user preferences functionality"""
+        print(f"\n{'='*50}")
+        print("TESTING USER PREFERENCES")
+        print(f"{'='*50}")
+        
+        # Test GET preferences (should return defaults if none set)
+        success, prefs = self.run_test(
+            "GET User Preferences (Initial)",
+            "GET",
+            "user/preferences",
+            200
+        )
+        if not success:
+            return False
+        
+        # Check default values
+        expected_defaults = {
+            "country": "US",
+            "currency": "USD", 
+            "currency_symbol": "$",
+            "electricity_rate": 0.12
+        }
+        
+        for key, expected_value in expected_defaults.items():
+            if prefs.get(key) != expected_value:
+                print(f"❌ Default {key} incorrect. Expected {expected_value}, got {prefs.get(key)}")
+                return False
+        print("   Default preferences correct")
+        
+        # Test PUT preferences (update)
+        update_prefs = {
+            "country": "DE",
+            "currency": "EUR",
+            "currency_symbol": "€", 
+            "electricity_rate": 0.35
+        }
+        
+        success, updated_prefs = self.run_test(
+            "PUT User Preferences (Update)",
+            "PUT",
+            "user/preferences",
+            200,
+            data=update_prefs
+        )
+        if not success:
+            return False
+        
+        # Verify preferences were updated
+        for key, expected_value in update_prefs.items():
+            if updated_prefs.get(key) != expected_value:
+                print(f"❌ Updated {key} incorrect. Expected {expected_value}, got {updated_prefs.get(key)}")
+                return False
+        print("   Preferences updated correctly")
+        
+        # Test GET preferences again to verify persistence
+        success, persisted_prefs = self.run_test(
+            "GET User Preferences (After Update)",
+            "GET", 
+            "user/preferences",
+            200
+        )
+        if not success:
+            return False
+        
+        for key, expected_value in update_prefs.items():
+            if persisted_prefs.get(key) != expected_value:
+                print(f"❌ Persisted {key} incorrect. Expected {expected_value}, got {persisted_prefs.get(key)}")
+                return False
+        
+        print("✅ User preferences functionality working correctly")
+        return True
+    
+    def test_calculator(self):
+        """Test cost calculator functionality"""
+        print(f"\n{'='*50}")
+        print("TESTING COST CALCULATOR")
+        print(f"{'='*50}")
+        
+        # Test calculator estimate
+        calc_data = {
+            "weight_grams": 50.0,
+            "filament_cost_per_kg": 25.0,
+            "printer_power_kw": 0.2,
+            "duration_minutes": 120.0,
+            "electricity_rate": 0.12
+        }
+        
+        success, calc_result = self.run_test(
+            "POST Calculator Estimate",
+            "POST",
+            "calculator/estimate",
+            200,
+            data=calc_data
+        )
+        if not success:
+            return False
+        
+        # Verify calculation fields exist
+        required_fields = ["filament_cost", "electricity_cost", "total_cost", "cost_per_gram"]
+        for field in required_fields:
+            if field not in calc_result:
+                print(f"❌ Missing field {field} in calculator result")
+                return False
+        
+        # Verify calculation correctness
+        expected_filament_cost = 50.0 * (25.0 / 1000)  # 50g * $25/kg
+        expected_electricity_cost = 0.2 * (120.0 / 60) * 0.12  # 0.2kW * 2h * $0.12/kWh
+        expected_total = expected_filament_cost + expected_electricity_cost
+        
+        tolerance = 0.01  # Allow small floating point differences
+        
+        if abs(calc_result["filament_cost"] - expected_filament_cost) > tolerance:
+            print(f"❌ Filament cost calculation incorrect. Expected {expected_filament_cost}, got {calc_result['filament_cost']}")
+            return False
+        
+        if abs(calc_result["electricity_cost"] - expected_electricity_cost) > tolerance:
+            print(f"❌ Electricity cost calculation incorrect. Expected {expected_electricity_cost}, got {calc_result['electricity_cost']}")
+            return False
+        
+        if abs(calc_result["total_cost"] - expected_total) > tolerance:
+            print(f"❌ Total cost calculation incorrect. Expected {expected_total}, got {calc_result['total_cost']}")
+            return False
+        
+        print(f"   Filament cost: ${calc_result['filament_cost']:.4f}")
+        print(f"   Electricity cost: ${calc_result['electricity_cost']:.4f}")  
+        print(f"   Total cost: ${calc_result['total_cost']:.4f}")
+        
+        print("✅ Cost calculator working correctly")
+        return True
+
     def test_custom_options(self):
         """Test custom brands and types functionality"""
         print(f"\n{'='*50}")
