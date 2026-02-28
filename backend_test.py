@@ -602,7 +602,7 @@ class FilamentVaultTester:
         print("CLEANING UP TEST DATA")
         print(f"{'='*50}")
         
-        # Delete test print job
+        # Delete test print job (only if it still exists)
         if self.print_job_id:
             self.run_test(
                 "DELETE Print Job", 
