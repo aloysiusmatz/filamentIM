@@ -32,14 +32,14 @@ Build a 3D print filament management app with inventory tracking, print job logg
 - Design: JetBrains Mono + Manrope fonts, orange primary (#f97316), grid borders aesthetic
 - All tests passing (Backend 13/13, Frontend 95%)
 
-### Phase 2 Features (Feb 2026)
-- CSV export for inventory data (download .csv with all filament details)
-- Bulk CSV import (upload .csv to batch-add filaments)
-- Print success/failure tracking (4 statuses: success, failed, in_progress, cancelled)
-- Custom brand/type via CreatableCombobox (add your own brands + types beyond presets)
-- 80+ color templates based on real market filament colors (click-to-select grid)
-- User reference data endpoint (merges presets with user's custom brands/types)
-- All tests passing (Backend 17/17, Frontend 100%)
+### Phase 3 Features (Feb 2026)
+- Printer master CRUD (name, model, build volume, notes) with dedicated /printers page
+- Edit print jobs (update status, printer, duration, project name, notes)
+- Print job status: Finished/Failed/In Progress/Cancelled with color-coded badges
+- Printer selection when logging print jobs (stored denormalized as printer_name)
+- Permanent custom brands/types (custom_brands, custom_types MongoDB collections)
+- Custom options saved on add via CreatableCombobox with onCustomAdd callback
+- All tests passing (Backend 18/18, Frontend 95%)
 
 ## Prioritized Backlog
 ### P0 (Done)
