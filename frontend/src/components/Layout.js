@@ -20,6 +20,7 @@ import {
   User,
   Menu,
   X,
+  Layers,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -27,6 +28,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/filaments", icon: Cylinder, label: "Filaments" },
   { to: "/print-jobs", icon: Printer, label: "Print Jobs" },
+  { to: "/printers", icon: Layers, label: "Printers" },
   { to: "/alerts", icon: Bell, label: "Alerts" },
 ];
 
