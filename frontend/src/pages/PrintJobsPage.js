@@ -426,6 +426,7 @@ export default function PrintJobsPage() {
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Weight</TableHead>
               <TableHead className="text-right">Duration</TableHead>
+              <TableHead className="text-right">Cost</TableHead>
               <TableHead>Date</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
@@ -433,7 +434,7 @@ export default function PrintJobsPage() {
           <TableBody>
             {jobs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground font-body">
+                <TableCell colSpan={10} className="text-center py-12 text-muted-foreground font-body">
                   {filaments.length === 0
                     ? "Add filaments first, then log your prints"
                     : "No prints logged yet. Start printing!"}
@@ -483,6 +484,11 @@ export default function PrintJobsPage() {
                     <TableCell className="text-right font-mono text-sm">
                       {formatDuration(j.duration_minutes)}
                     </TableCell>
+                    <TableCell className="text-right font-mono text-sm" data-testid={`job-cost-${j.id}`}>
+                      {j.estimated_cost != null
+                        ? `${prefs.currency_symbol || "$"}${Number(j.estimated_cost).toFixed(2)}`
+                        : "-"}
+                    </TableCell>
                     <TableCell className="text-sm text-muted-foreground font-mono">
                       {new Date(j.created_at).toLocaleDateString()}
                     </TableCell>
@@ -530,6 +536,8 @@ export default function PrintJobsPage() {
         printers={printers}
         onSave={handleSave}
         editingJob={editingJob}
+        currencySymbol={prefs.currency_symbol}
+        electricityRate={prefs.electricity_rate}
       />
     </div>
   );
