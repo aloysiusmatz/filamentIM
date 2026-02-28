@@ -9,8 +9,6 @@ import {
 } from "recharts";
 
 const COLORS = ["#f97316", "#0ea5e9", "#22c55e", "#eab308", "#a855f7", "#ec4899", "#14b8a6", "#f43f5e"];
-
-function StatCard({ icon: Icon, label, value, sub, delay, testId }) {
   return (
     <Card
       className="animate-fade-up border-border/40 hover:border-primary/30 transition-colors"
@@ -164,9 +162,16 @@ function LowStockList({ filaments }) {
 export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [prefs, setPrefs] = useState({ currency_symbol: "$" });
 
   useEffect(() => {
-    api.get("/dashboard/stats").then((res) => setStats(res.data)).catch(() => {}).finally(() => setLoading(false));
+    Promise.all([
+      api.get("/dashboard/stats"),
+      api.get("/user/preferences"),
+    ]).then(([statsRes, prefsRes]) => {
+      setStats(statsRes.data);
+      setPrefs(prefsRes.data);
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -178,6 +183,7 @@ export default function DashboardPage() {
   }
 
   const s = stats || {};
+  const sym = prefs.currency_symbol || "$";
 
   return (
     <div className="p-4 md:p-8 max-w-[1600px] space-y-8" data-testid="dashboard-page">
@@ -193,7 +199,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 grid-borders">
         <StatCard icon={Cylinder} label="Total Spools" value={s.total_filaments || 0} sub="in inventory" delay={0} testId="stat-total-spools" />
         <StatCard icon={Weight} label="Weight Available" value={`${s.total_weight_remaining || 0}g`} sub="across all spools" delay={50} testId="stat-weight" />
-        <StatCard icon={DollarSign} label="Inventory Value" value={`$${s.total_inventory_value || 0}`} sub="total cost" delay={100} testId="stat-value" />
+        <StatCard icon={DollarSign} label="Inventory Value" value={`${sym}${s.total_inventory_value || 0}`} sub="total cost" delay={100} testId="stat-value" />
         <StatCard icon={AlertTriangle} label="Low Stock" value={s.low_stock_count || 0} sub="spools below 20%" delay={150} testId="stat-low-stock" />
       </div>
 
