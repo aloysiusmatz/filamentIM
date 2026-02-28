@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,9 +23,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Progress } from "@/components/ui/progress";
 import {
   Plus, MoreHorizontal, Pencil, Trash2, CalendarIcon, Loader2, Search, Filter,
+  Download, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { CreatableCombobox } from "@/components/CreatableCombobox";
+import { COLOR_TEMPLATES } from "@/lib/colors";
 
 const BRANDS = [
   "Hatchbox", "Prusament", "eSUN", "Polymaker", "Overture", "Sunlu",
@@ -48,10 +51,11 @@ const emptyForm = {
   purchase_date: null, notes: "",
 };
 
-function FilamentDialog({ open, onClose, filament, onSave }) {
+function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes }) {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
+  const [showColors, setShowColors] = useState(false);
 
   useEffect(() => {
     if (filament) {
@@ -63,6 +67,7 @@ function FilamentDialog({ open, onClose, filament, onSave }) {
     } else {
       setForm(emptyForm);
     }
+    setShowColors(false);
   }, [filament, open]);
 
   const handleSubmit = async (e) => {
