@@ -21,6 +21,8 @@ import {
   Menu,
   X,
   Layers,
+  Calculator,
+  Settings,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -29,7 +31,9 @@ const navItems = [
   { to: "/filaments", icon: Cylinder, label: "Filaments" },
   { to: "/print-jobs", icon: Printer, label: "Print Jobs" },
   { to: "/printers", icon: Layers, label: "Printers" },
+  { to: "/calculator", icon: Calculator, label: "Calculator" },
   { to: "/alerts", icon: Bell, label: "Alerts" },
+  { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
 function Sidebar({ open, onClose }) {
