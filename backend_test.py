@@ -189,9 +189,9 @@ class FilamentVaultTester:
         return True
 
     def test_print_job_operations(self):
-        """Test print job creation and editing"""
+        """Test print job creation, cost estimation, and weight restoration on delete"""
         print(f"\n{'='*50}")
-        print("TESTING PRINT JOB OPERATIONS")
+        print("TESTING PRINT JOB OPERATIONS WITH COST ESTIMATION")
         print(f"{'='*50}")
         
         # First create a test filament
@@ -220,6 +220,8 @@ class FilamentVaultTester:
             print("❌ No filament ID returned")
             return False
         
+        print(f"   Initial filament weight: {new_filament['weight_remaining']}g")
+        
         # Create print job with printer
         print_job_data = {
             "filament_id": self.filament_id,
@@ -232,7 +234,7 @@ class FilamentVaultTester:
         }
         
         success, new_job = self.run_test(
-            "POST Print Job (Create)",
+            "POST Print Job (Create with Cost Estimation)",
             "POST",
             "print-jobs",
             200,
@@ -245,6 +247,42 @@ class FilamentVaultTester:
         if not self.print_job_id:
             print("❌ No print job ID returned")
             return False
+        
+        # Check if cost estimation fields are present
+        cost_fields = ["estimated_cost", "est_filament_cost", "est_electricity_cost"]
+        for field in cost_fields:
+            if field not in new_job:
+                print(f"❌ Missing cost field {field} in print job")
+                return False
+            print(f"   {field}: {new_job[field]}")
+        
+        # Verify filament weight was reduced
+        success, updated_filament = self.run_test(
+            "GET Filament (After Print Job)",
+            "GET",
+            f"filaments",  # Get all filaments, find ours
+            200
+        )
+        if not success:
+            return False
+        
+        # Find our specific filament
+        our_filament = None
+        for f in updated_filament:
+            if f['id'] == self.filament_id:
+                our_filament = f
+                break
+        
+        if not our_filament:
+            print("❌ Could not find our test filament")
+            return False
+        
+        expected_weight = 1000.0 - 15.5  # Original - used
+        if our_filament['weight_remaining'] != expected_weight:
+            print(f"❌ Filament weight not reduced correctly. Expected {expected_weight}, got {our_filament['weight_remaining']}")
+            return False
+        
+        print(f"   Filament weight after print: {our_filament['weight_remaining']}g")
         
         # Test editing print job (key feature!)
         job_update_data = {
@@ -267,7 +305,61 @@ class FilamentVaultTester:
             print("❌ Print job status was not updated correctly")
             return False
         
-        print("✅ All print job operations passed")
+        # Test DELETE print job - should restore filament weight
+        weight_before_delete = our_filament['weight_remaining']
+        
+        success, delete_response = self.run_test(
+            "DELETE Print Job (Should Restore Weight)",
+            "DELETE",
+            f"print-jobs/{self.print_job_id}",
+            200
+        )
+        if not success:
+            return False
+        
+        # Check if weight_restored is in response
+        if 'weight_restored' not in delete_response:
+            print("❌ weight_restored field missing from delete response")
+            return False
+        
+        if delete_response['weight_restored'] != 15.5:
+            print(f"❌ Incorrect weight_restored value. Expected 15.5, got {delete_response['weight_restored']}")
+            return False
+        
+        print(f"   Weight restored on delete: {delete_response['weight_restored']}g")
+        
+        # Verify filament weight was actually restored
+        success, restored_filaments = self.run_test(
+            "GET Filament (After Delete - Weight Restored)",
+            "GET",
+            f"filaments",
+            200
+        )
+        if not success:
+            return False
+        
+        # Find our filament again
+        restored_filament = None
+        for f in restored_filaments:
+            if f['id'] == self.filament_id:
+                restored_filament = f
+                break
+        
+        if not restored_filament:
+            print("❌ Could not find filament after delete")
+            return False
+        
+        expected_restored_weight = min(1000.0, weight_before_delete + 15.5)  # Should be back to 1000
+        if restored_filament['weight_remaining'] != expected_restored_weight:
+            print(f"❌ Filament weight not restored correctly. Expected {expected_restored_weight}, got {restored_filament['weight_remaining']}")
+            return False
+        
+        print(f"   Filament weight after delete: {restored_filament['weight_remaining']}g")
+        
+        # Clear the print job ID since we deleted it
+        self.print_job_id = None
+        
+        print("✅ All print job operations with cost estimation and weight restoration passed")
         return True
 
     def test_user_preferences(self):
