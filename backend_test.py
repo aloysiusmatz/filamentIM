@@ -183,18 +183,49 @@ class FilamentAPITester:
             "project_name": "Test Benchy",
             "weight_used": 15.5,
             "duration_minutes": 120,
+            "status": "success",  # NEW: Test status field
             "notes": "Test print job"
         }
         
         success, response, status = self.make_request('POST', 'print-jobs', job_data, 200)
         
-        if success and 'id' in response:
+        if success and 'id' in response and response.get('status') == 'success':
             self.created_job_id = response['id']
-            self.log_result("Create Print Job", True)
+            self.log_result("Create Print Job with Status", True)
             return True
         else:
-            self.log_result("Create Print Job", False, f"Status: {status}, Response: {response}")
+            self.log_result("Create Print Job with Status", False, f"Status: {status}, Response: {response}")
             return False
+
+    def test_create_print_job_different_statuses(self):
+        """Test print job creation with different status values"""
+        if not hasattr(self, 'created_filament_id'):
+            self.log_result("Create Print Jobs (All Statuses)", False, "No filament ID available")
+            return False
+        
+        statuses = ["failed", "in_progress", "cancelled"]
+        all_passed = True
+        
+        for test_status in statuses:
+            job_data = {
+                "filament_id": self.created_filament_id,
+                "project_name": f"Test Print - {test_status}",
+                "weight_used": 10.0,
+                "duration_minutes": 60,
+                "status": test_status,
+                "notes": f"Test {test_status} job"
+            }
+            
+            success, response, status_code = self.make_request('POST', 'print-jobs', job_data, 200)
+            
+            if success and response.get('status') == test_status:
+                print(f"  ✅ Status '{test_status}' works correctly")
+            else:
+                print(f"  ❌ Status '{test_status}' failed - Status: {status_code}, Response: {response}")
+                all_passed = False
+        
+        self.log_result("Create Print Jobs (All Statuses)", all_passed)
+        return all_passed
 
     def test_list_print_jobs(self):
         """Test print job listing"""
