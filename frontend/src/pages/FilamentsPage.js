@@ -569,7 +569,7 @@ export default function FilamentsPage() {
                         <Progress value={pct} className="h-1.5" />
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-mono">${f.cost}</TableCell>
+                    <TableCell className="text-right font-mono">{prefs.currency_symbol || "$"}{f.cost}</TableCell>
                     <TableCell className="hidden md:table-cell text-xs text-muted-foreground font-mono">
                       {f.temp_nozzle}/{f.temp_bed}
                     </TableCell>
@@ -617,6 +617,7 @@ export default function FilamentsPage() {
         onSave={handleSave}
         allBrands={allBrands}
         allTypes={allTypes}
+        currencySymbol={prefs.currency_symbol}
       />
     </div>
   );
