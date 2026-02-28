@@ -315,6 +315,11 @@ export default function FilamentsPage() {
   const [filterType, setFilterType] = useState("all");
   const [filterBrand, setFilterBrand] = useState("all");
   const [search, setSearch] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [allBrands, setAllBrands] = useState(BRANDS);
+  const [allTypes, setAllTypes] = useState(TYPES);
+  const fileInputRef = useRef(null);
 
   const fetchFilaments = useCallback(async () => {
     try {
@@ -330,7 +335,19 @@ export default function FilamentsPage() {
     }
   }, [filterType, filterBrand]);
 
-  useEffect(() => { fetchFilaments(); }, [fetchFilaments]);
+  const fetchUserOptions = useCallback(async () => {
+    try {
+      const res = await api.get("/reference/user-options");
+      const userBrands = res.data.brands || [];
+      const userTypes = res.data.types || [];
+      const merged_brands = [...new Set([...BRANDS, ...userBrands])];
+      const merged_types = [...new Set([...TYPES, ...userTypes])];
+      setAllBrands(merged_brands);
+      setAllTypes(merged_types);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { fetchFilaments(); fetchUserOptions(); }, [fetchFilaments, fetchUserOptions]);
 
   const handleSave = async (data) => {
     if (editing) {
@@ -342,6 +359,7 @@ export default function FilamentsPage() {
     }
     setEditing(null);
     fetchFilaments();
+    fetchUserOptions();
   };
 
   const handleDelete = async (id) => {
@@ -351,6 +369,45 @@ export default function FilamentsPage() {
       fetchFilaments();
     } catch {
       toast.error("Failed to delete");
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const response = await api.get("/filaments/export", { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `filaments_export_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Exported successfully");
+    } catch {
+      toast.error("Export failed");
+    }
+  };
+
+  const handleImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post("/filaments/import", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      toast.success(`Imported ${res.data.count} filaments`);
+      fetchFilaments();
+      fetchUserOptions();
+      setImportOpen(false);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Import failed");
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
