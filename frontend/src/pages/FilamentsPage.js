@@ -440,14 +440,44 @@ export default function FilamentsPage() {
             {filaments.length} spool{filaments.length !== 1 ? "s" : ""} in stock
           </p>
         </div>
-        <Button
-          onClick={() => { setEditing(null); setDialogOpen(true); }}
-          className="glow-primary"
-          data-testid="add-filament-btn"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Spool
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={handleExport}
+            disabled={filaments.length === 0}
+            data-testid="export-csv-btn"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
+          <div className="relative">
+            <Button
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              data-testid="import-csv-btn"
+            >
+              {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+              Import CSV
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              onChange={handleImport}
+              className="hidden"
+              data-testid="import-file-input"
+            />
+          </div>
+          <Button
+            onClick={() => { setEditing(null); setDialogOpen(true); }}
+            className="glow-primary"
+            data-testid="add-filament-btn"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Spool
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -574,6 +604,8 @@ export default function FilamentsPage() {
         onClose={() => { setDialogOpen(false); setEditing(null); }}
         filament={editing}
         onSave={handleSave}
+        allBrands={allBrands}
+        allTypes={allTypes}
       />
     </div>
   );
