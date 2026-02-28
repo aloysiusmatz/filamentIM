@@ -32,14 +32,15 @@ Build a 3D print filament management app with inventory tracking, print job logg
 - Design: JetBrains Mono + Manrope fonts, orange primary (#f97316), grid borders aesthetic
 - All tests passing (Backend 13/13, Frontend 95%)
 
-### Phase 3 Features (Feb 2026)
-- Printer master CRUD (name, model, build volume, notes) with dedicated /printers page
-- Edit print jobs (update status, printer, duration, project name, notes)
-- Print job status: Finished/Failed/In Progress/Cancelled with color-coded badges
-- Printer selection when logging print jobs (stored denormalized as printer_name)
-- Permanent custom brands/types (custom_brands, custom_types MongoDB collections)
-- Custom options saved on add via CreatableCombobox with onCustomAdd callback
-- All tests passing (Backend 18/18, Frontend 95%)
+### Phase 4 Features (Feb 2026)
+- Delete print job restores filament weight to inventory
+- Printer master now includes power consumption (kW) for cost estimation
+- New 3D Calculator page with inventory mode (select filaments/printers) and manual mode
+- Live cost estimation embedded in print job dialog (filament cost + electricity cost)
+- Cost column in print jobs table showing estimated cost per print
+- User preferences: country/currency selector (38 countries), electricity rate per kWh
+- Currency symbol used across cost displays
+- All tests passing: Backend 100%, Frontend 100%
 
 ## Prioritized Backlog
 ### P0 (Done)
