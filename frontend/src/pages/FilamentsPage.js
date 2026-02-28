@@ -110,25 +110,23 @@ function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes }
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Brand</Label>
-              <Select value={form.brand} onValueChange={(v) => set("brand", v)}>
-                <SelectTrigger data-testid="filament-brand-select">
-                  <SelectValue placeholder="Select brand" />
-                </SelectTrigger>
-                <SelectContent>
-                  {BRANDS.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <CreatableCombobox
+                options={allBrands}
+                value={form.brand}
+                onChange={(v) => set("brand", v)}
+                placeholder="Select or add brand"
+                testId="filament-brand-select"
+              />
             </div>
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select value={form.filament_type} onValueChange={(v) => set("filament_type", v)}>
-                <SelectTrigger data-testid="filament-type-select">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <CreatableCombobox
+                options={allTypes}
+                value={form.filament_type}
+                onChange={(v) => set("filament_type", v)}
+                placeholder="Select or add type"
+                testId="filament-type-select"
+              />
             </div>
           </div>
 
@@ -158,9 +156,42 @@ function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes }
                   placeholder="#f97316"
                   className="flex-1 font-mono text-sm"
                 />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowColors(!showColors)}
+                  data-testid="toggle-color-templates-btn"
+                  className="text-xs whitespace-nowrap"
+                >
+                  {showColors ? "Hide" : "Templates"}
+                </Button>
               </div>
             </div>
           </div>
+
+          {showColors && (
+            <div className="space-y-2 animate-fade-up" data-testid="color-templates-grid">
+              <Label className="text-xs text-muted-foreground">Pick a color template</Label>
+              <div className="grid grid-cols-10 sm:grid-cols-12 gap-1.5 max-h-[120px] overflow-y-auto p-1">
+                {COLOR_TEMPLATES.map((c) => (
+                  <button
+                    key={c.name}
+                    type="button"
+                    title={c.name}
+                    className={`w-6 h-6 rounded border-2 cursor-pointer transition-transform hover:scale-125 ${
+                      form.color_hex?.toUpperCase() === c.hex.toUpperCase()
+                        ? "border-primary ring-1 ring-primary scale-110"
+                        : "border-border/50"
+                    }`}
+                    style={{ backgroundColor: c.hex }}
+                    onClick={() => { set("color", c.name); set("color_hex", c.hex); }}
+                    data-testid={`color-template-${c.name.toLowerCase().replace(/\s/g, "-")}`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
