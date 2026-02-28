@@ -1,11 +1,14 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import uuid
+import io
+import csv
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
@@ -73,6 +76,7 @@ class PrintJobCreate(BaseModel):
     project_name: str
     weight_used: float
     duration_minutes: int = 0
+    status: str = "success"
     notes: str = ""
 
 
