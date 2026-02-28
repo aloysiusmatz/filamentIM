@@ -286,6 +286,77 @@ class FilamentAPITester:
             self.log_result("Get Reference Types", False, f"Status: {status}, Response: {response}")
             return False
 
+    def test_user_options(self):
+        """Test user-specific brands and types from their filaments"""
+        success, response, status = self.make_request('GET', 'reference/user-options')
+        
+        if success and 'brands' in response and 'types' in response:
+            self.log_result("Get User Options", True)
+            return True
+        else:
+            self.log_result("Get User Options", False, f"Status: {status}, Response: {response}")
+            return False
+
+    # NEW FEATURE TESTS
+    def test_export_filaments(self):
+        """Test CSV export functionality"""
+        url = f"{self.base_url}/api/filaments/export"
+        headers = {}
+        if self.token:
+            headers['Authorization'] = f'Bearer {self.token}'
+        
+        try:
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code == 200:
+                # Check if it's CSV content
+                content = response.text
+                if 'Brand,Type,Color' in content or len(content.split('\n')) >= 1:
+                    self.log_result("Export Filaments CSV", True)
+                    return True
+                else:
+                    self.log_result("Export Filaments CSV", False, f"Invalid CSV content: {content[:100]}")
+                    return False
+            else:
+                self.log_result("Export Filaments CSV", False, f"Status: {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_result("Export Filaments CSV", False, f"Error: {str(e)}")
+            return False
+
+    def test_import_filaments(self):
+        """Test CSV import functionality"""
+        # Create a test CSV content
+        csv_content = """Brand,Type,Color,Color Hex,Weight Total (g),Weight Remaining (g),Cost ($),Diameter (mm),Nozzle Temp,Bed Temp,Purchase Date,Notes
+TestBrand,PLA,Red,#FF0000,1000,900,25.99,1.75,200,60,2024-01-15,Test import
+CustomBrand,PETG,Blue,#0000FF,1000,800,30.99,1.75,230,70,,Another test
+"""
+        
+        url = f"{self.base_url}/api/filaments/import"
+        headers = {}
+        if self.token:
+            headers['Authorization'] = f'Bearer {self.token}'
+        
+        try:
+            # Prepare multipart form data
+            files = {'file': ('test_filaments.csv', csv_content, 'text/csv')}
+            response = requests.post(url, files=files, headers=headers)
+            
+            if response.status_code == 200:
+                response_data = response.json()
+                if 'count' in response_data and response_data.get('count') >= 2:
+                    self.log_result("Import Filaments CSV", True)
+                    return True
+                else:
+                    self.log_result("Import Filaments CSV", False, f"Unexpected response: {response_data}")
+                    return False
+            else:
+                self.log_result("Import Filaments CSV", False, f"Status: {response.status_code}, Response: {response.text}")
+                return False
+        except Exception as e:
+            self.log_result("Import Filaments CSV", False, f"Error: {str(e)}")
+            return False
+
     # Cleanup Tests
     def test_delete_print_job(self):
         """Test print job deletion"""
