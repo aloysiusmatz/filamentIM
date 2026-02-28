@@ -316,10 +316,18 @@ async def create_print_job(data: PrintJobCreate, user=Depends(get_current_user))
         {"$set": {"weight_remaining": new_weight, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
     printer_name = ""
+    printer_power = 0.2
     if data.printer_id:
         printer = await db.printers.find_one({"id": data.printer_id, "user_id": user["id"]}, {"_id": 0})
         if printer:
             printer_name = printer.get("name", "")
+            printer_power = printer.get("power_kwh", 0.2)
+    filament_cost_per_g = filament.get("cost", 0) / max(filament.get("weight_total", 1), 1)
+    est_filament_cost = data.weight_used * filament_cost_per_g
+    prefs = await db.user_preferences.find_one({"user_id": user["id"]}, {"_id": 0})
+    elec_rate = prefs.get("electricity_rate", 0.12) if prefs else 0.12
+    est_electricity_cost = printer_power * (data.duration_minutes / 60) * elec_rate
+    estimated_cost = est_filament_cost + est_electricity_cost
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     doc = {
@@ -331,6 +339,9 @@ async def create_print_job(data: PrintJobCreate, user=Depends(get_current_user))
         "filament_color": filament.get("color", ""),
         "filament_color_hex": filament.get("color_hex", "#ffffff"),
         "printer_name": printer_name,
+        "estimated_cost": round(estimated_cost, 4),
+        "est_filament_cost": round(est_filament_cost, 4),
+        "est_electricity_cost": round(est_electricity_cost, 4),
         "created_at": now
     }
     await db.print_jobs.insert_one(doc)
@@ -414,6 +425,41 @@ async def delete_printer(printer_id: str, user=Depends(get_current_user)):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Printer not found")
     return {"message": "Printer deleted"}
+
+
+# ── User Preferences ─────────────────────────────────────────────
+
+@api_router.get("/user/preferences")
+async def get_preferences(user=Depends(get_current_user)):
+    prefs = await db.user_preferences.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not prefs:
+        return {"user_id": user["id"], "country": "US", "currency": "USD", "currency_symbol": "$", "electricity_rate": 0.12}
+    return prefs
+
+@api_router.put("/user/preferences")
+async def update_preferences(data: UserPreferencesUpdate, user=Depends(get_current_user)):
+    await db.user_preferences.update_one(
+        {"user_id": user["id"]},
+        {"$set": {**data.model_dump(), "user_id": user["id"]}},
+        upsert=True
+    )
+    prefs = await db.user_preferences.find_one({"user_id": user["id"]}, {"_id": 0})
+    return prefs
+
+
+# ── Cost Calculator ──────────────────────────────────────────────
+
+@api_router.post("/calculator/estimate")
+async def calculate_cost(data: CostEstimateRequest):
+    filament_cost = data.weight_grams * (data.filament_cost_per_kg / 1000)
+    electricity_cost = data.printer_power_kw * (data.duration_minutes / 60) * data.electricity_rate
+    total = filament_cost + electricity_cost
+    return {
+        "filament_cost": round(filament_cost, 4),
+        "electricity_cost": round(electricity_cost, 4),
+        "total_cost": round(total, 4),
+        "cost_per_gram": round(filament_cost / max(data.weight_grams, 0.01), 4),
+    }
 
 
 # ── Dashboard ────────────────────────────────────────────────────
