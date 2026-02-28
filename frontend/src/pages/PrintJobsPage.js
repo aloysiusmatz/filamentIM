@@ -284,17 +284,20 @@ export default function PrintJobsPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
+  const [prefs, setPrefs] = useState({ currency_symbol: "$", electricity_rate: 0.12 });
 
   const fetchData = useCallback(async () => {
     try {
-      const [jobsRes, filRes, printerRes] = await Promise.all([
+      const [jobsRes, filRes, printerRes, prefRes] = await Promise.all([
         api.get("/print-jobs"),
         api.get("/filaments"),
         api.get("/printers"),
+        api.get("/user/preferences"),
       ]);
       setJobs(jobsRes.data);
       setFilaments(filRes.data);
       setPrinters(printerRes.data);
+      setPrefs(prefRes.data);
     } catch {
       toast.error("Failed to load data");
     } finally {
