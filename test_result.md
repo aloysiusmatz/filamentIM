@@ -101,3 +101,54 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+```yaml
+user_problem_statement: "test the website"
+backend:
+  - task: "Ensure API functions correctly"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+        - agent: "main"
+        - comment: "Started backend successfully. Needs an end-to-end test."
+frontend:
+  - task: "Test Frontend user flows"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+        - agent: "main"
+        - comment: "Started frontend. Need to test login and main pages."
+        - working: false
+        - agent: "testing"
+        - comment: "Critical compilation error in babel-metadata-plugin.js (TypeError in traverse) blocks the frontend from loading on port 3000. Backend API is operational."
+        - working: "NA"
+        - agent: "main"
+        - comment: "Fixed babel-metadata-plugin.js traversal issue. Restarting testing."
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: true
+test_plan:
+  current_focus:
+    - "Register a new user"
+    - "Login with the new user"
+    - "Navigate through Dashboard, Filaments, Print Jobs, Printers, Calculator, Alerts"
+    - "Add a new Filament"
+    - "Add a new Print Job"
+  stuck_tasks: []
+  test_all: true
+  test_priority: "high_first"
+agent_communication:
+    - agent: "main"
+    - message: "Please test the core user flows: registration, login, and adding entries. Both frontend and backend are running. The frontend is at http://localhost:3000."
+```

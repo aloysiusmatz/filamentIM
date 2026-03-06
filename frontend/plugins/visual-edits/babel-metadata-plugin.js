@@ -545,7 +545,7 @@ const babelMetadataPlugin = ({ types: t }) => {
 
     // Check if it's a destructured prop from function params
     if (bindingPath.isObjectPattern() ||
-        (bindingPath.parentPath && bindingPath.parentPath.isObjectPattern())) {
+      (bindingPath.parentPath && bindingPath.parentPath.isObjectPattern())) {
       const funcParent = bindingPath.findParent(p =>
         p.isFunctionDeclaration() || p.isArrowFunctionExpression() || p.isFunctionExpression()
       );
@@ -583,8 +583,8 @@ const babelMetadataPlugin = ({ types: t }) => {
       if (t.isCallExpression(init) && t.isIdentifier(init.callee)) {
         const calleeName = init.callee.name;
         if (calleeName === "useState" || calleeName === "useReducer" ||
-            calleeName === "useContext" || calleeName === "useMemo" ||
-            calleeName === "useCallback") {
+          calleeName === "useContext" || calleeName === "useMemo" ||
+          calleeName === "useCallback") {
           return { type: "state", varName: name, isEditable: false };
         }
       }
@@ -816,8 +816,8 @@ const babelMetadataPlugin = ({ types: t }) => {
           const attrs = jsxPath.get('attributes');
           const attrPath = attrs.find(
             a => a.isJSXAttribute() &&
-                 t.isJSXIdentifier(a.node.name) &&
-                 a.node.name.name === propName
+              t.isJSXIdentifier(a.node.name) &&
+              a.node.name.name === propName
           );
 
           if (attrPath) {
@@ -933,7 +933,7 @@ const babelMetadataPlugin = ({ types: t }) => {
           if (!localName) return;
 
           // Search for usages of this component
-          importPath.parentPath.parentPath.traverse({
+          importPath.parentPath.traverse({
             JSXOpeningElement(jsxPath) {
               if (result) return;
 
@@ -1117,8 +1117,8 @@ const babelMetadataPlugin = ({ types: t }) => {
         if (p.node.specifiers) {
           for (const spec of p.node.specifiers) {
             if (t.isExportSpecifier(spec) &&
-                t.isIdentifier(spec.exported) &&
-                spec.exported.name === exportName) {
+              t.isIdentifier(spec.exported) &&
+              spec.exported.name === exportName) {
               // Need to find the original declaration
               const localName = t.isIdentifier(spec.local) ? spec.local.name : exportName;
               const binding = p.scope.getBinding(localName);
