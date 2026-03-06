@@ -9,6 +9,8 @@ import {
 } from "recharts";
 
 const COLORS = ["#f97316", "#0ea5e9", "#22c55e", "#eab308", "#a855f7", "#ec4899", "#14b8a6", "#f43f5e"];
+
+function StatCard({ icon: Icon, label, value, sub, delay = 0, testId }) {
   return (
     <Card
       className="animate-fade-up border-border/40 hover:border-primary/30 transition-colors"
