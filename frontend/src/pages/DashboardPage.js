@@ -110,24 +110,29 @@ function RecentJobs({ jobs }) {
   }
   return (
     <div className="space-y-3 p-1">
-      {jobs.map((job) => (
-        <div
-          key={job.id}
-          className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-          data-testid={`recent-job-${job.id}`}
-        >
-          <div className="color-swatch" style={{ backgroundColor: job.filament_color_hex || "#888" }} />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{job.project_name}</p>
-            <p className="text-xs text-muted-foreground font-body">
-              {job.filament_brand} {job.filament_type} &middot; {job.weight_used}g
-            </p>
+      {jobs.map((job) => {
+        const firstSpool = job.spools_used?.[0];
+        const colorHex = firstSpool?.color_hex || "#888";
+        const spoolInfo = job.spools_used?.map((s) => `${s.filament_type || ''} ${s.color || ''}`).join(', ') || 'Unknown';
+        return (
+          <div
+            key={job.id}
+            className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+            data-testid={`recent-job-${job.id}`}
+          >
+            <div className="color-swatch" style={{ backgroundColor: colorHex }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{job.project_name}</p>
+              <p className="text-xs text-muted-foreground font-body">
+                {spoolInfo} &middot; {job.total_weight_used || 0}g
+              </p>
+            </div>
+            <span className="text-xs text-muted-foreground font-mono">
+              {new Date(job.created_at).toLocaleDateString()}
+            </span>
           </div>
-          <span className="text-xs text-muted-foreground font-mono">
-            {new Date(job.created_at).toLocaleDateString()}
-          </span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -173,7 +178,7 @@ export default function DashboardPage() {
     ]).then(([statsRes, prefsRes]) => {
       setStats(statsRes.data);
       setPrefs(prefsRes.data);
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch(() => { }).finally(() => setLoading(false));
   }, []);
 
   if (loading) {

@@ -12,6 +12,7 @@ import {
 import {
   LayoutDashboard,
   Cylinder,
+  Package,
   Printer,
   Bell,
   Sun,
@@ -28,7 +29,7 @@ import { useState } from "react";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/filaments", icon: Cylinder, label: "Filaments" },
+  { to: "/inventory", icon: Package, label: "Inventory" },
   { to: "/print-jobs", icon: Printer, label: "Print Jobs" },
   { to: "/printers", icon: Layers, label: "Printers" },
   { to: "/calculator", icon: Calculator, label: "Calculator" },
@@ -49,9 +50,8 @@ function Sidebar({ open, onClose }) {
         />
       )}
       <aside
-        className={`fixed top-0 left-0 h-full z-50 w-64 border-r bg-card transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto ${
-          open ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed top-0 left-0 h-full z-50 w-64 border-r bg-card transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto ${open ? "translate-x-0" : "-translate-x-full"
+          }`}
         data-testid="sidebar"
       >
         <div className="flex flex-col h-full">
@@ -75,10 +75,9 @@ function Sidebar({ open, onClose }) {
                 onClick={onClose}
                 data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, "-")}`}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   }`
                 }
               >

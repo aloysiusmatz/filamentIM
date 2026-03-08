@@ -43,43 +43,43 @@ class UserLogin(BaseModel):
     email: str
     password: str
 
-class FilamentCreate(BaseModel):
+
+# ── Master Stock Models ──────────────────────────────────────────
+
+class MasterStockCreate(BaseModel):
     brand: str
     filament_type: str
     color: str
     color_hex: str = "#ffffff"
-    weight_total: float
-    weight_remaining: float
+    empty_spool_weight: float = 250.0
+    weight_total: float = 1000.0
     cost: float = 0.0
-    diameter: float = 1.75
-    temp_nozzle: int = 200
-    temp_bed: int = 60
-    purchase_date: Optional[str] = None
-    notes: str = ""
+    quantity_in_stock: int = 1
 
-class FilamentUpdate(BaseModel):
+class MasterStockUpdate(BaseModel):
     brand: Optional[str] = None
     filament_type: Optional[str] = None
     color: Optional[str] = None
     color_hex: Optional[str] = None
+    empty_spool_weight: Optional[float] = None
     weight_total: Optional[float] = None
-    weight_remaining: Optional[float] = None
     cost: Optional[float] = None
-    diameter: Optional[float] = None
-    temp_nozzle: Optional[int] = None
-    temp_bed: Optional[int] = None
-    purchase_date: Optional[str] = None
-    notes: Optional[str] = None
+    quantity_in_stock: Optional[int] = None
+
+
+# ── Print Job Models ─────────────────────────────────────────────
+
+class SpoolUsage(BaseModel):
+    active_spool_id: str
+    weight_used: float
 
 class PrintJobCreate(BaseModel):
-    filament_id: str
     project_name: str
-    weight_used: float
+    spools_used: List[SpoolUsage]
     duration_minutes: int = 0
     status: str = "success"
     printer_id: str = ""
     notes: str = ""
-
 
 class PrintJobUpdate(BaseModel):
     project_name: Optional[str] = None
@@ -89,13 +89,20 @@ class PrintJobUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class SpoolAdjustment(BaseModel):
+    amount: float
+    type: str = "positive_correction"  # positive_correction, scrap, calibration
+    notes: str = ""
+
+
+# ── Printer Models ───────────────────────────────────────────────
+
 class PrinterCreate(BaseModel):
     name: str
     model: str = ""
     build_volume: str = ""
     power_kwh: float = 0.2
     notes: str = ""
-
 
 class PrinterUpdate(BaseModel):
     name: Optional[str] = None
@@ -187,10 +194,38 @@ async def get_me(user=Depends(get_current_user)):
     return user
 
 
-# ── Filament Routes ──────────────────────────────────────────────
+# ── Unique String ID Generator ───────────────────────────────────
 
-@api_router.get("/filaments")
-async def list_filaments(
+async def generate_unique_string_id(user_id: str, filament_type: str, color: str) -> str:
+    """Generate a unique string ID like PLA-BLK-001."""
+    type_abbr = filament_type[:3].upper() if filament_type else "UNK"
+    color_abbr = color[:3].upper() if color else "UNK"
+    prefix = f"{type_abbr}-{color_abbr}"
+
+    existing = await db.active_spools.find(
+        {"user_id": user_id, "unique_string_id": {"$regex": f"^{prefix}-"}},
+        {"unique_string_id": 1, "_id": 0}
+    ).to_list(10000)
+
+    max_num = 0
+    for doc in existing:
+        sid = doc.get("unique_string_id", "")
+        parts = sid.rsplit("-", 1)
+        if len(parts) == 2:
+            try:
+                num = int(parts[1])
+                if num > max_num:
+                    max_num = num
+            except ValueError:
+                pass
+
+    return f"{prefix}-{max_num + 1:03d}"
+
+
+# ── Master Stock Routes ──────────────────────────────────────────
+
+@api_router.get("/master-stock")
+async def list_master_stock(
     filament_type: Optional[str] = None,
     brand: Optional[str] = None,
     user=Depends(get_current_user)
@@ -200,100 +235,198 @@ async def list_filaments(
         query["filament_type"] = filament_type
     if brand:
         query["brand"] = brand
-    filaments = await db.filaments.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    return filaments
+    items = await db.master_stock.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return items
 
-@api_router.post("/filaments")
-async def create_filament(data: FilamentCreate, user=Depends(get_current_user)):
-    filament_id = str(uuid.uuid4())
+@api_router.post("/master-stock")
+async def create_master_stock(data: MasterStockCreate, user=Depends(get_current_user)):
+    stock_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     doc = {
-        "id": filament_id,
+        "id": stock_id,
         "user_id": user["id"],
         **data.model_dump(),
         "created_at": now,
         "updated_at": now
     }
-    await db.filaments.insert_one(doc)
+    await db.master_stock.insert_one(doc)
     doc.pop("_id", None)
     return doc
 
-
-@api_router.get("/filaments/export")
-async def export_filaments(user=Depends(get_current_user)):
-    filaments = await db.filaments.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow([
-        "Brand", "Type", "Color", "Color Hex", "Weight Total (g)",
-        "Weight Remaining (g)", "Cost ($)", "Diameter (mm)",
-        "Nozzle Temp", "Bed Temp", "Purchase Date", "Notes"
-    ])
-    for f in filaments:
-        writer.writerow([
-            f.get("brand", ""), f.get("filament_type", ""), f.get("color", ""),
-            f.get("color_hex", ""), f.get("weight_total", 0), f.get("weight_remaining", 0),
-            f.get("cost", 0), f.get("diameter", 1.75), f.get("temp_nozzle", 200),
-            f.get("temp_bed", 60), f.get("purchase_date", ""), f.get("notes", ""),
-        ])
-    output.seek(0)
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=filaments_export.csv"}
-    )
-
-
-@api_router.post("/filaments/import")
-async def import_filaments(file: UploadFile = File(...), user=Depends(get_current_user)):
-    content = await file.read()
-    reader = csv.DictReader(io.StringIO(content.decode("utf-8")))
-    count = 0
-    for row in reader:
-        filament_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
-        doc = {
-            "id": filament_id,
-            "user_id": user["id"],
-            "brand": row.get("Brand", ""),
-            "filament_type": row.get("Type", ""),
-            "color": row.get("Color", ""),
-            "color_hex": row.get("Color Hex", "#ffffff"),
-            "weight_total": float(row.get("Weight Total (g)", 1000)),
-            "weight_remaining": float(row.get("Weight Remaining (g)", 1000)),
-            "cost": float(row.get("Cost ($)", 0)),
-            "diameter": float(row.get("Diameter (mm)", 1.75)),
-            "temp_nozzle": int(float(row.get("Nozzle Temp", 200))),
-            "temp_bed": int(float(row.get("Bed Temp", 60))),
-            "purchase_date": row.get("Purchase Date", None) or None,
-            "notes": row.get("Notes", ""),
-            "created_at": now,
-            "updated_at": now,
-        }
-        await db.filaments.insert_one(doc)
-        count += 1
-    return {"message": f"Imported {count} filaments", "count": count}
-
-
-@api_router.put("/filaments/{filament_id}")
-async def update_filament(filament_id: str, data: FilamentUpdate, user=Depends(get_current_user)):
+@api_router.put("/master-stock/{stock_id}")
+async def update_master_stock(stock_id: str, data: MasterStockUpdate, user=Depends(get_current_user)):
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    result = await db.filaments.update_one(
-        {"id": filament_id, "user_id": user["id"]},
+    result = await db.master_stock.update_one(
+        {"id": stock_id, "user_id": user["id"]},
         {"$set": update_data}
     )
     if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Filament not found")
-    updated = await db.filaments.find_one({"id": filament_id}, {"_id": 0})
+        raise HTTPException(status_code=404, detail="Master stock not found")
+    updated = await db.master_stock.find_one({"id": stock_id}, {"_id": 0})
     return updated
 
-@api_router.delete("/filaments/{filament_id}")
-async def delete_filament(filament_id: str, user=Depends(get_current_user)):
-    result = await db.filaments.delete_one({"id": filament_id, "user_id": user["id"]})
+@api_router.delete("/master-stock/{stock_id}")
+async def delete_master_stock(stock_id: str, user=Depends(get_current_user)):
+    result = await db.master_stock.delete_one({"id": stock_id, "user_id": user["id"]})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Filament not found")
-    return {"message": "Filament deleted"}
+        raise HTTPException(status_code=404, detail="Master stock not found")
+    return {"message": "Master stock deleted"}
+
+@api_router.post("/master-stock/{stock_id}/open")
+async def open_spool_from_stock(stock_id: str, user=Depends(get_current_user)):
+    """Take one spool from warehouse and create an ActiveSpool."""
+    stock = await db.master_stock.find_one({"id": stock_id, "user_id": user["id"]}, {"_id": 0})
+    if not stock:
+        raise HTTPException(status_code=404, detail="Master stock not found")
+    if stock.get("quantity_in_stock", 0) <= 0:
+        raise HTTPException(status_code=400, detail="No spools left in stock")
+
+    # Decrement quantity
+    await db.master_stock.update_one(
+        {"id": stock_id},
+        {
+            "$inc": {"quantity_in_stock": -1},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+
+    # Generate unique string ID
+    unique_sid = await generate_unique_string_id(user["id"], stock.get("filament_type", ""), stock.get("color", ""))
+
+    # Create active spool
+    spool_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    spool_doc = {
+        "id": spool_id,
+        "user_id": user["id"],
+        "unique_string_id": unique_sid,
+        "master_stock_id": stock_id,
+        "brand": stock.get("brand", ""),
+        "filament_type": stock.get("filament_type", ""),
+        "color": stock.get("color", ""),
+        "color_hex": stock.get("color_hex", "#ffffff"),
+        "empty_spool_weight": stock.get("empty_spool_weight", 250.0),
+        "weight_total": stock.get("weight_total", 1000.0),
+        "weight_remaining": stock.get("weight_total", 1000.0),
+        "cost": stock.get("cost", 0.0),
+        "status": "OPENED",
+        "created_at": now,
+        "updated_at": now
+    }
+    await db.active_spools.insert_one(spool_doc)
+    spool_doc.pop("_id", None)
+
+    # Return updated stock + new spool
+    updated_stock = await db.master_stock.find_one({"id": stock_id}, {"_id": 0})
+    return {"active_spool": spool_doc, "master_stock": updated_stock}
+
+
+# ── Active Spool Routes ──────────────────────────────────────────
+
+@api_router.get("/active-spools")
+async def list_active_spools(
+    status: Optional[str] = None,
+    user=Depends(get_current_user)
+):
+    query = {"user_id": user["id"]}
+    if status:
+        query["status"] = status
+    spools = await db.active_spools.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return spools
+
+@api_router.get("/active-spools/{spool_id}")
+async def get_active_spool(spool_id: str, user=Depends(get_current_user)):
+    spool = await db.active_spools.find_one({"id": spool_id, "user_id": user["id"]}, {"_id": 0})
+    if not spool:
+        raise HTTPException(status_code=404, detail="Active spool not found")
+    return spool
+
+
+@api_router.post("/active-spools/{spool_id}/return")
+async def return_spool_to_warehouse(spool_id: str, user=Depends(get_current_user)):
+    """Return an unused spool back to warehouse stock."""
+    spool = await db.active_spools.find_one({"id": spool_id, "user_id": user["id"]}, {"_id": 0})
+    if not spool:
+        raise HTTPException(status_code=404, detail="Active spool not found")
+    if spool.get("weight_remaining", 0) != spool.get("weight_total", 0):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot return a partially used spool to the warehouse."
+        )
+    # Increment master stock quantity
+    master_stock_id = spool.get("master_stock_id")
+    if master_stock_id:
+        await db.master_stock.update_one(
+            {"id": master_stock_id, "user_id": user["id"]},
+            {
+                "$inc": {"quantity_in_stock": 1},
+                "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+            }
+        )
+    # Delete the active spool
+    await db.active_spools.delete_one({"id": spool_id, "user_id": user["id"]})
+    return {"message": "Spool returned to warehouse", "master_stock_id": master_stock_id}
+
+
+@api_router.post("/active-spools/{spool_id}/adjust")
+async def adjust_spool(spool_id: str, data: SpoolAdjustment, user=Depends(get_current_user)):
+    """Manually adjust spool weight (add/subtract)."""
+    spool = await db.active_spools.find_one({"id": spool_id, "user_id": user["id"]}, {"_id": 0})
+    if not spool:
+        raise HTTPException(status_code=404, detail="Active spool not found")
+
+    # Determine if positive or negative adjustment
+    positive_types = {"positive_correction", "add", "found"}
+    negative_types = {"scrap", "calibration", "waste", "subtract"}
+
+    if data.type in positive_types:
+        new_weight = spool.get("weight_remaining", 0) + abs(data.amount)
+    elif data.type in negative_types:
+        new_weight = spool.get("weight_remaining", 0) - abs(data.amount)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown adjustment type: {data.type}")
+
+    new_weight = max(0, new_weight)
+    # Cap at weight_total
+    new_weight = min(new_weight, spool.get("weight_total", 9999))
+
+    # Auto-status logic
+    if new_weight <= 0:
+        new_status = "DEPLETED"
+    elif spool.get("status") == "DEPLETED" and new_weight > 0:
+        new_status = "OPENED"
+    else:
+        new_status = spool.get("status", "OPENED")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.active_spools.update_one(
+        {"id": spool_id},
+        {"$set": {
+            "weight_remaining": round(new_weight, 2),
+            "status": new_status,
+            "updated_at": now
+        }}
+    )
+
+    # Save audit trail
+    adjustment_doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "active_spool_id": spool_id,
+        "unique_string_id": spool.get("unique_string_id", ""),
+        "type": data.type,
+        "amount": data.amount,
+        "weight_before": spool.get("weight_remaining", 0),
+        "weight_after": round(new_weight, 2),
+        "notes": data.notes,
+        "created_at": now
+    }
+    await db.spool_adjustments.insert_one(adjustment_doc)
+    adjustment_doc.pop("_id", None)
+
+    updated_spool = await db.active_spools.find_one({"id": spool_id}, {"_id": 0})
+    return {"spool": updated_spool, "adjustment": adjustment_doc}
 
 
 # ── Print Job Routes ─────────────────────────────────────────────
@@ -305,16 +438,27 @@ async def list_print_jobs(user=Depends(get_current_user)):
 
 @api_router.post("/print-jobs")
 async def create_print_job(data: PrintJobCreate, user=Depends(get_current_user)):
-    filament = await db.filaments.find_one(
-        {"id": data.filament_id, "user_id": user["id"]}, {"_id": 0}
-    )
-    if not filament:
-        raise HTTPException(status_code=404, detail="Filament not found")
-    new_weight = max(0, filament["weight_remaining"] - data.weight_used)
-    await db.filaments.update_one(
-        {"id": data.filament_id},
-        {"$set": {"weight_remaining": new_weight, "updated_at": datetime.now(timezone.utc).isoformat()}}
-    )
+    if not data.spools_used or len(data.spools_used) == 0:
+        raise HTTPException(status_code=400, detail="At least one spool must be specified")
+
+    # Validate all spools and collect data
+    spool_details = []
+    for usage in data.spools_used:
+        spool = await db.active_spools.find_one(
+            {"id": usage.active_spool_id, "user_id": user["id"]}, {"_id": 0}
+        )
+        if not spool:
+            raise HTTPException(status_code=404, detail=f"Active spool {usage.active_spool_id} not found")
+        if spool.get("status") == "DEPLETED":
+            raise HTTPException(status_code=400, detail=f"Spool {spool.get('unique_string_id', usage.active_spool_id)} is DEPLETED")
+        if usage.weight_used > spool.get("weight_remaining", 0):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Weight {usage.weight_used}g exceeds remaining {spool.get('weight_remaining', 0)}g on spool {spool.get('unique_string_id', usage.active_spool_id)}"
+            )
+        spool_details.append(spool)
+
+    # Get printer info
     printer_name = ""
     printer_power = 0.2
     if data.printer_id:
@@ -322,30 +466,72 @@ async def create_print_job(data: PrintJobCreate, user=Depends(get_current_user))
         if printer:
             printer_name = printer.get("name", "")
             printer_power = printer.get("power_kwh", 0.2)
-    filament_cost_per_g = filament.get("cost", 0) / max(filament.get("weight_total", 1), 1)
-    est_filament_cost = data.weight_used * filament_cost_per_g
+
+    # Get electricity rate
     prefs = await db.user_preferences.find_one({"user_id": user["id"]}, {"_id": 0})
     elec_rate = prefs.get("electricity_rate", 0.12) if prefs else 0.12
+
+    # Calculate costs per spool
+    total_filament_cost = 0.0
+    spools_used_docs = []
+    for i, usage in enumerate(data.spools_used):
+        spool = spool_details[i]
+        cost_per_g = spool.get("cost", 0) / max(spool.get("weight_total", 1), 1)
+        fil_cost = usage.weight_used * cost_per_g
+        total_filament_cost += fil_cost
+
+        spools_used_docs.append({
+            "active_spool_id": usage.active_spool_id,
+            "unique_string_id": spool.get("unique_string_id", ""),
+            "weight_used": usage.weight_used,
+            "brand": spool.get("brand", ""),
+            "filament_type": spool.get("filament_type", ""),
+            "color": spool.get("color", ""),
+            "color_hex": spool.get("color_hex", "#ffffff"),
+            "filament_cost": round(fil_cost, 4),
+        })
+
     est_electricity_cost = printer_power * (data.duration_minutes / 60) * elec_rate
-    estimated_cost = est_filament_cost + est_electricity_cost
+    estimated_cost = total_filament_cost + est_electricity_cost
+
+    # Calculate total weight used for convenience
+    total_weight_used = sum(u.weight_used for u in data.spools_used)
+
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         "id": job_id,
         "user_id": user["id"],
-        **data.model_dump(),
-        "filament_brand": filament.get("brand", ""),
-        "filament_type": filament.get("filament_type", ""),
-        "filament_color": filament.get("color", ""),
-        "filament_color_hex": filament.get("color_hex", "#ffffff"),
+        "project_name": data.project_name,
+        "spools_used": spools_used_docs,
+        "total_weight_used": round(total_weight_used, 2),
+        "duration_minutes": data.duration_minutes,
+        "status": data.status,
+        "printer_id": data.printer_id,
         "printer_name": printer_name,
+        "notes": data.notes,
         "estimated_cost": round(estimated_cost, 4),
-        "est_filament_cost": round(est_filament_cost, 4),
+        "est_filament_cost": round(total_filament_cost, 4),
         "est_electricity_cost": round(est_electricity_cost, 4),
         "created_at": now
     }
     await db.print_jobs.insert_one(doc)
     doc.pop("_id", None)
+
+    # Deduct weight from each active spool + auto-depletion
+    for usage in data.spools_used:
+        spool = await db.active_spools.find_one({"id": usage.active_spool_id}, {"_id": 0})
+        new_weight = max(0, spool["weight_remaining"] - usage.weight_used)
+        new_status = "DEPLETED" if new_weight <= 0 else spool.get("status", "OPENED")
+        await db.active_spools.update_one(
+            {"id": usage.active_spool_id},
+            {"$set": {
+                "weight_remaining": new_weight,
+                "status": new_status,
+                "updated_at": now
+            }}
+        )
+
     return doc
 
 @api_router.delete("/print-jobs/{job_id}")
@@ -353,18 +539,34 @@ async def delete_print_job(job_id: str, user=Depends(get_current_user)):
     job = await db.print_jobs.find_one({"id": job_id, "user_id": user["id"]}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Print job not found")
-    weight_restored = 0.0
-    if job.get("filament_id") and job.get("weight_used"):
-        filament = await db.filaments.find_one({"id": job["filament_id"]}, {"_id": 0})
-        if filament:
-            new_weight = min(filament.get("weight_total", 0), filament.get("weight_remaining", 0) + job["weight_used"])
-            await db.filaments.update_one(
-                {"id": job["filament_id"]},
-                {"$set": {"weight_remaining": new_weight, "updated_at": datetime.now(timezone.utc).isoformat()}}
-            )
-            weight_restored = job["weight_used"]
+
+    total_weight_restored = 0.0
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Restore weight to each spool
+    for spool_usage in job.get("spools_used", []):
+        spool_id = spool_usage.get("active_spool_id")
+        weight_used = spool_usage.get("weight_used", 0)
+        if spool_id and weight_used:
+            spool = await db.active_spools.find_one({"id": spool_id}, {"_id": 0})
+            if spool:
+                new_weight = min(
+                    spool.get("weight_total", 0),
+                    spool.get("weight_remaining", 0) + weight_used
+                )
+                new_status = "OPENED" if new_weight > 0 else spool.get("status", "DEPLETED")
+                await db.active_spools.update_one(
+                    {"id": spool_id},
+                    {"$set": {
+                        "weight_remaining": new_weight,
+                        "status": new_status,
+                        "updated_at": now
+                    }}
+                )
+                total_weight_restored += weight_used
+
     await db.print_jobs.delete_one({"id": job_id, "user_id": user["id"]})
-    return {"message": "Print job deleted", "weight_restored": weight_restored}
+    return {"message": "Print job deleted", "weight_restored": total_weight_restored}
 
 
 @api_router.put("/print-jobs/{job_id}")
@@ -467,27 +669,48 @@ async def calculate_cost(data: CostEstimateRequest):
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(user=Depends(get_current_user)):
     user_id = user["id"]
-    filaments = await db.filaments.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
+    master_stocks = await db.master_stock.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
+    active_spools = await db.active_spools.find({"user_id": user_id}, {"_id": 0}).to_list(1000)
     jobs = await db.print_jobs.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
-    total_filaments = len(filaments)
-    total_weight = sum(f.get("weight_remaining", 0) for f in filaments)
-    total_value = sum(f.get("cost", 0) for f in filaments)
-    low_stock = [
-        f for f in filaments
-        if f.get("weight_total", 0) > 0 and (f.get("weight_remaining", 0) / f.get("weight_total", 1)) < 0.2
-    ]
-    total_used = sum(j.get("weight_used", 0) for j in jobs)
+    # Total warehouse spools + active spools
+    warehouse_spools = sum(ms.get("quantity_in_stock", 0) for ms in master_stocks)
+    total_filaments = warehouse_spools + len(active_spools)
 
+    # Weight remaining (active spools only)
+    total_weight = sum(s.get("weight_remaining", 0) for s in active_spools)
+
+    # Total inventory value = warehouse value + active spool value
+    warehouse_value = sum(ms.get("cost", 0) * ms.get("quantity_in_stock", 0) for ms in master_stocks)
+    active_value = sum(s.get("cost", 0) for s in active_spools)
+    total_value = warehouse_value + active_value
+
+    # Low stock active spools (below 20%)
+    low_stock = []
+    for s in active_spools:
+        wt = s.get("weight_total", 0)
+        wr = s.get("weight_remaining", 0)
+        if wt > 0 and s.get("status") == "OPENED" and (wr / wt) < 0.2:
+            low_stock.append(s)
+
+    # Total weight used from jobs
+    total_used = sum(j.get("total_weight_used", 0) for j in jobs)
+
+    # Usage by filament type (from jobs)
     type_usage = {}
     for j in jobs:
-        ft = j.get("filament_type", "Unknown")
-        type_usage[ft] = type_usage.get(ft, 0) + j.get("weight_used", 0)
+        for su in j.get("spools_used", []):
+            ft = su.get("filament_type", "Unknown")
+            type_usage[ft] = type_usage.get(ft, 0) + su.get("weight_used", 0)
     usage_by_type = [{"name": k, "weight": round(v, 1)} for k, v in type_usage.items()]
 
+    # Type distribution (from master stock + active spools)
     type_count = {}
-    for f in filaments:
-        ft = f.get("filament_type", "Unknown")
+    for ms in master_stocks:
+        ft = ms.get("filament_type", "Unknown")
+        type_count[ft] = type_count.get(ft, 0) + ms.get("quantity_in_stock", 0)
+    for s in active_spools:
+        ft = s.get("filament_type", "Unknown")
         type_count[ft] = type_count.get(ft, 0) + 1
     type_distribution = [{"name": k, "count": v} for k, v in type_count.items()]
 
@@ -509,19 +732,21 @@ async def get_dashboard_stats(user=Depends(get_current_user)):
 
 @api_router.get("/alerts")
 async def get_alerts(user=Depends(get_current_user)):
-    filaments = await db.filaments.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    spools = await db.active_spools.find(
+        {"user_id": user["id"], "status": "OPENED"}, {"_id": 0}
+    ).to_list(1000)
     alerts = []
-    for f in filaments:
-        wt = f.get("weight_total", 0)
-        wr = f.get("weight_remaining", 0)
+    for s in spools:
+        wt = s.get("weight_total", 0)
+        wr = s.get("weight_remaining", 0)
         if wt > 0:
             pct = (wr / wt) * 100
             if pct < 10:
-                alerts.append({**f, "alert_level": "critical", "remaining_pct": round(pct, 1)})
+                alerts.append({**s, "alert_level": "critical", "remaining_pct": round(pct, 1)})
             elif pct < 20:
-                alerts.append({**f, "alert_level": "warning", "remaining_pct": round(pct, 1)})
+                alerts.append({**s, "alert_level": "warning", "remaining_pct": round(pct, 1)})
             elif pct < 30:
-                alerts.append({**f, "alert_level": "low", "remaining_pct": round(pct, 1)})
+                alerts.append({**s, "alert_level": "low", "remaining_pct": round(pct, 1)})
     alerts.sort(key=lambda x: x.get("remaining_pct", 100))
     return alerts
 
@@ -549,15 +774,20 @@ async def get_types():
 
 @api_router.get("/reference/user-options")
 async def get_user_options(user=Depends(get_current_user)):
-    filaments = await db.filaments.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    master_stocks = await db.master_stock.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
+    active_spools = await db.active_spools.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
     custom_brands_docs = await db.custom_brands.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
     custom_types_docs = await db.custom_types.find({"user_id": user["id"]}, {"_id": 0}).to_list(1000)
-    filament_brands = set(f["brand"] for f in filaments if f.get("brand"))
-    filament_types = set(f["filament_type"] for f in filaments if f.get("filament_type"))
+
+    ms_brands = set(ms["brand"] for ms in master_stocks if ms.get("brand"))
+    ms_types = set(ms["filament_type"] for ms in master_stocks if ms.get("filament_type"))
+    as_brands = set(s["brand"] for s in active_spools if s.get("brand"))
+    as_types = set(s["filament_type"] for s in active_spools if s.get("filament_type"))
     custom_brand_names = set(d["name"] for d in custom_brands_docs if d.get("name"))
     custom_type_names = set(d["name"] for d in custom_types_docs if d.get("name"))
-    brands = sorted(filament_brands | custom_brand_names)
-    types = sorted(filament_types | custom_type_names)
+
+    brands = sorted(ms_brands | as_brands | custom_brand_names)
+    types = sorted(ms_types | as_types | custom_type_names)
     return {"brands": brands, "types": types}
 
 
@@ -591,6 +821,216 @@ async def add_custom_type(data: CustomOption, user=Depends(get_current_user)):
             "created_at": datetime.now(timezone.utc).isoformat()
         })
     return {"message": "Type saved", "name": name}
+
+
+# ── CSV Import / Export ──────────────────────────────────────────
+
+CSV_COLUMNS = [
+    "Location", "Quantity", "Brand", "Type", "Color", "Color Hex",
+    "Weight Total (g)", "Weight Remaining (g)", "Cost ($)",
+    "Empty Spool Weight (g)", "Notes"
+]
+
+@api_router.get("/inventory/export-template")
+async def export_csv_template(user=Depends(get_current_user)):
+    """Download a CSV template pre-filled with current inventory."""
+    user_id = user["id"]
+    stocks = await db.master_stock.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
+    spools = await db.active_spools.find({"user_id": user_id}, {"_id": 0}).to_list(10000)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(CSV_COLUMNS)
+
+    for ms in stocks:
+        writer.writerow([
+            "WAREHOUSE",
+            ms.get("quantity_in_stock", 0),
+            ms.get("brand", ""),
+            ms.get("filament_type", ""),
+            ms.get("color", ""),
+            ms.get("color_hex", "#ffffff"),
+            ms.get("weight_total", 1000),
+            "",  # weight_remaining not applicable for warehouse
+            ms.get("cost", 0),
+            ms.get("empty_spool_weight", 250),
+            "",
+        ])
+
+    for sp in spools:
+        writer.writerow([
+            "ACTIVE",
+            "",  # quantity not applicable for active spools
+            sp.get("brand", ""),
+            sp.get("filament_type", ""),
+            sp.get("color", ""),
+            sp.get("color_hex", "#ffffff"),
+            sp.get("weight_total", 1000),
+            sp.get("weight_remaining", 0),
+            sp.get("cost", 0),
+            sp.get("empty_spool_weight", 250),
+            "",
+        ])
+
+    # If no data, add example rows
+    if not stocks and not spools:
+        writer.writerow(["WAREHOUSE", 5, "Hatchbox", "PLA", "Black", "#000000", 1000, "", 25, 250, "Example row"])
+        writer.writerow(["ACTIVE", "", "Hatchbox", "PLA", "White", "#ffffff", 1000, 750, 25, 250, "Example row"])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=inventory_template.csv"}
+    )
+
+
+@api_router.post("/inventory/import")
+async def import_csv(file: UploadFile = File(...), user=Depends(get_current_user)):
+    """Smart CSV import: upsert WAREHOUSE stock, create ACTIVE spools with parent lookup."""
+    user_id = user["id"]
+    content = await file.read()
+    text = content.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text))
+
+    stats = {"warehouse_created": 0, "warehouse_updated": 0, "spools_created": 0, "errors": []}
+    now = datetime.now(timezone.utc).isoformat()
+
+    row_num = 1
+    for row in reader:
+        row_num += 1
+        location = (row.get("Location") or "").strip().upper()
+        brand = (row.get("Brand") or "").strip()
+        ftype = (row.get("Type") or "").strip()
+        color = (row.get("Color") or "").strip()
+        color_hex = (row.get("Color Hex") or "#ffffff").strip()
+
+        if not brand or not ftype or not color:
+            stats["errors"].append(f"Row {row_num}: Missing Brand, Type, or Color")
+            continue
+
+        try:
+            weight_total = float(row.get("Weight Total (g)") or 1000)
+            cost = float(row.get("Cost ($)") or 0)
+            empty_spool = float(row.get("Empty Spool Weight (g)") or 250)
+        except ValueError:
+            stats["errors"].append(f"Row {row_num}: Invalid numeric value")
+            continue
+
+        if location == "WAREHOUSE":
+            try:
+                quantity = int(row.get("Quantity") or 1)
+            except ValueError:
+                stats["errors"].append(f"Row {row_num}: Invalid Quantity")
+                continue
+
+            # Check if exact match exists
+            existing = await db.master_stock.find_one({
+                "user_id": user_id,
+                "brand": brand,
+                "filament_type": ftype,
+                "color": color
+            })
+
+            if existing:
+                await db.master_stock.update_one(
+                    {"id": existing["id"]},
+                    {
+                        "$inc": {"quantity_in_stock": quantity},
+                        "$set": {"updated_at": now}
+                    }
+                )
+                stats["warehouse_updated"] += 1
+            else:
+                stock_id = str(uuid.uuid4())
+                await db.master_stock.insert_one({
+                    "id": stock_id,
+                    "user_id": user_id,
+                    "brand": brand,
+                    "filament_type": ftype,
+                    "color": color,
+                    "color_hex": color_hex,
+                    "empty_spool_weight": empty_spool,
+                    "weight_total": weight_total,
+                    "cost": cost,
+                    "quantity_in_stock": quantity,
+                    "created_at": now,
+                    "updated_at": now,
+                })
+                stats["warehouse_created"] += 1
+
+        elif location == "ACTIVE":
+            try:
+                weight_remaining = float(row.get("Weight Remaining (g)") or weight_total)
+            except ValueError:
+                stats["errors"].append(f"Row {row_num}: Invalid Weight Remaining")
+                continue
+
+            # Find or create parent MasterStock
+            parent = await db.master_stock.find_one({
+                "user_id": user_id,
+                "brand": brand,
+                "filament_type": ftype,
+                "color": color
+            })
+
+            if not parent:
+                parent_id = str(uuid.uuid4())
+                parent = {
+                    "id": parent_id,
+                    "user_id": user_id,
+                    "brand": brand,
+                    "filament_type": ftype,
+                    "color": color,
+                    "color_hex": color_hex,
+                    "empty_spool_weight": empty_spool,
+                    "weight_total": weight_total,
+                    "cost": cost,
+                    "quantity_in_stock": 0,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+                await db.master_stock.insert_one(parent)
+                stats["warehouse_created"] += 1
+
+            parent_id = parent["id"]
+
+            # Generate unique string ID
+            unique_sid = await generate_unique_string_id(user_id, ftype, color)
+
+            # Create active spool
+            spool_id = str(uuid.uuid4())
+            status = "DEPLETED" if weight_remaining <= 0 else "OPENED"
+            await db.active_spools.insert_one({
+                "id": spool_id,
+                "user_id": user_id,
+                "unique_string_id": unique_sid,
+                "master_stock_id": parent_id,
+                "brand": brand,
+                "filament_type": ftype,
+                "color": color,
+                "color_hex": color_hex,
+                "empty_spool_weight": empty_spool,
+                "weight_total": weight_total,
+                "weight_remaining": weight_remaining,
+                "cost": cost,
+                "status": status,
+                "created_at": now,
+                "updated_at": now,
+            })
+            stats["spools_created"] += 1
+
+        else:
+            stats["errors"].append(f"Row {row_num}: Unknown Location '{location}'. Use WAREHOUSE or ACTIVE.")
+
+    return {
+        "message": "Import complete",
+        "warehouse_created": stats["warehouse_created"],
+        "warehouse_updated": stats["warehouse_updated"],
+        "spools_created": stats["spools_created"],
+        "errors": stats["errors"][:20],  # Cap errors at 20
+        "total_errors": len(stats["errors"]),
+    }
 
 
 # ── App Setup ────────────────────────────────────────────────────

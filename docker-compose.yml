@@ -3,18 +3,27 @@ services:
     image: mongo:latest
     ports:
       - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
 
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "8001:8000"
     env_file: ./backend/.env
     depends_on:
       - mongodb
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        # Masukkan IP CasaOS dan port backend secara langsung di sini
+        - REACT_APP_BACKEND_URL=http://192.168.0.240:8001
     ports:
-      - "3000:3000"
+      - "3000:80"  # Host tetap di port 3000, tapi di dalam menggunakan port 80 (Nginx)
     depends_on:
       - backend
+
+volumes:
+  mongodb_data:

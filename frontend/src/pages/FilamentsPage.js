@@ -23,7 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Progress } from "@/components/ui/progress";
 import {
   Plus, MoreHorizontal, Pencil, Trash2, CalendarIcon, Loader2, Search, Filter,
-  Download, Upload,
+  Download, Upload, Camera,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -48,14 +48,16 @@ const emptyForm = {
   brand: "", filament_type: "", color: "", color_hex: "#f97316",
   weight_total: 1000, weight_remaining: 1000, cost: 0,
   diameter: 1.75, temp_nozzle: 200, temp_bed: 60,
-  purchase_date: null, notes: "",
+  status: "OPEN", purchase_date: null, notes: "",
 };
 
 function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes, currencySymbol }) {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
   const [showColors, setShowColors] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (filament) {
@@ -93,14 +95,59 @@ function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes, 
     }
   };
 
+  const handleScanLabel = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanning(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post("/filaments/analyze-label", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const parsed = res.data;
+      setForm((prev) => ({
+        ...prev,
+        filament_type: parsed.filament_type || prev.filament_type,
+        color: parsed.color || prev.color,
+        diameter: parsed.diameter || prev.diameter,
+        temp_nozzle: parsed.temp_nozzle || prev.temp_nozzle,
+        temp_bed: parsed.temp_bed || prev.temp_bed,
+      }));
+      toast.success("Label scanned successfully!");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to analyze label");
+    } finally {
+      setScanning(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const set = (key, val) => setForm((p) => ({ ...p, [key]: val }));
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle data-testid="filament-dialog-title">
-            {filament ? "Edit Filament" : "Add Filament"}
+          <DialogTitle data-testid="filament-dialog-title" className="flex items-center justify-between pr-6">
+            <span>{filament ? "Edit Filament" : "Add Filament"}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={scanning}
+            >
+              {scanning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Camera className="w-4 h-4 mr-2" />}
+              Scan Label
+            </Button>
+            <input
+              type="file"
+              accept="image/*"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={handleScanLabel}
+            />
           </DialogTitle>
           <DialogDescription>
             {filament ? "Update filament spool details" : "Add a new filament spool to your inventory"}
@@ -115,7 +162,7 @@ function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes, 
                 value={form.brand}
                 onChange={(v) => set("brand", v)}
                 onCustomAdd={(v) => {
-                  api.post("/reference/custom-brands", { name: v }).then(() => fetchUserOptions()).catch(() => {});
+                  api.post("/reference/custom-brands", { name: v }).then(() => fetchUserOptions()).catch(() => { });
                 }}
                 placeholder="Select or add brand"
                 testId="filament-brand-select"
@@ -128,7 +175,7 @@ function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes, 
                 value={form.filament_type}
                 onChange={(v) => set("filament_type", v)}
                 onCustomAdd={(v) => {
-                  api.post("/reference/custom-types", { name: v }).then(() => fetchUserOptions()).catch(() => {});
+                  api.post("/reference/custom-types", { name: v }).then(() => fetchUserOptions()).catch(() => { });
                 }}
                 placeholder="Select or add type"
                 testId="filament-type-select"
@@ -185,11 +232,10 @@ function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes, 
                     key={c.name}
                     type="button"
                     title={c.name}
-                    className={`w-6 h-6 rounded border-2 cursor-pointer transition-transform hover:scale-125 ${
-                      form.color_hex?.toUpperCase() === c.hex.toUpperCase()
-                        ? "border-primary ring-1 ring-primary scale-110"
-                        : "border-border/50"
-                    }`}
+                    className={`w-6 h-6 rounded border-2 cursor-pointer transition-transform hover:scale-125 ${form.color_hex?.toUpperCase() === c.hex.toUpperCase()
+                      ? "border-primary ring-1 ring-primary scale-110"
+                      : "border-border/50"
+                      }`}
                     style={{ backgroundColor: c.hex }}
                     onClick={() => { set("color", c.name); set("color_hex", c.hex); }}
                     data-testid={`color-template-${c.name.toLowerCase().replace(/\s/g, "-")}`}
@@ -263,28 +309,42 @@ function FilamentDialog({ open, onClose, filament, onSave, allBrands, allTypes, 
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Purchase Date</Label>
-            <Popover open={dateOpen} onOpenChange={setDateOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-left font-normal"
-                  data-testid="filament-date-btn"
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {form.purchase_date ? format(form.purchase_date, "PPP") : "Pick a date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={form.purchase_date}
-                  onSelect={(d) => { set("purchase_date", d); setDateOpen(false); }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={form.status || "OPEN"} onValueChange={(v) => set("status", v)}>
+                <SelectTrigger data-testid="filament-status-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="OPEN">Open</SelectItem>
+                  <SelectItem value="CLOSED">Closed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Purchase Date</Label>
+              <Popover open={dateOpen} onOpenChange={setDateOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal"
+                    data-testid="filament-date-btn"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {form.purchase_date ? format(form.purchase_date, "PPP") : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={form.purchase_date}
+                    onSelect={(d) => { set("purchase_date", d); setDateOpen(false); }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -357,7 +417,7 @@ export default function FilamentsPage() {
   useEffect(() => { fetchFilaments(); fetchUserOptions(); }, [fetchFilaments, fetchUserOptions]);
 
   useEffect(() => {
-    api.get("/user/preferences").then((res) => setPrefs(res.data)).catch(() => {});
+    api.get("/user/preferences").then((res) => setPrefs(res.data)).catch(() => { });
   }, []);
 
   const handleSave = async (data) => {
@@ -532,6 +592,7 @@ export default function FilamentsPage() {
               <TableHead>Brand</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Color</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="text-right">Remaining</TableHead>
               <TableHead className="text-right">Cost</TableHead>
               <TableHead className="hidden md:table-cell">Temps</TableHead>
@@ -561,6 +622,11 @@ export default function FilamentsPage() {
                       <Badge variant="secondary" className="font-mono text-xs">{f.filament_type}</Badge>
                     </TableCell>
                     <TableCell className="font-body">{f.color}</TableCell>
+                    <TableCell>
+                      <Badge variant={f.status === "CLOSED" ? "outline" : "default"} className={f.status === "CLOSED" ? "text-muted-foreground" : ""}>
+                        {f.status || "OPEN"}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="space-y-1">
                         <span className={`font-mono text-sm ${pctColor}`}>

@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import Layout from "@/components/Layout";
 import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
-import FilamentsPage from "@/pages/FilamentsPage";
+import InventoryPage from "@/pages/InventoryPage";
 import PrintJobsPage from "@/pages/PrintJobsPage";
 import PrintersPage from "@/pages/PrintersPage";
 import CalculatorPage from "@/pages/CalculatorPage";
@@ -28,7 +28,7 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<DashboardPage />} />
-        <Route path="filaments" element={<FilamentsPage />} />
+        <Route path="inventory" element={<InventoryPage />} />
         <Route path="print-jobs" element={<PrintJobsPage />} />
         <Route path="printers" element={<PrintersPage />} />
         <Route path="calculator" element={<CalculatorPage />} />

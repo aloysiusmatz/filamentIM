@@ -36,7 +36,7 @@ export default function AlertsPage() {
   useEffect(() => {
     api.get("/alerts")
       .then((res) => setAlerts(res.data))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
   }, []);
 
@@ -134,6 +134,11 @@ export default function AlertsPage() {
                           {alert.filament_type}
                         </Badge>
                         <span className="text-sm text-muted-foreground font-body">{alert.color}</span>
+                        {alert.unique_string_id && (
+                          <Badge variant="secondary" className="font-mono text-xs">
+                            {alert.unique_string_id}
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-3">
                         <Progress value={pct} className="h-2 flex-1" />
